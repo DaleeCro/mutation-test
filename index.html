@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Overlay Zug (Scroll + CTA)</title>
+    <script src="https://at.staticfiles.at/snippets/mkt/statisch/gsap-business/minified/gsap.min.js"></script>
+    <style>
+        html, body { margin: 0; overflow: hidden; background: transparent; }
+        #schienen { width: 100vw; }
+        #zug {
+            width: 900px;
+            height: 474px;
+            position: absolute;
+            bottom: 0;
+            left: -900px;
+        }
+        @media screen and (max-width: 960px) {
+            #zug {
+                transform: scale(0.5);
+                transform-origin: bottom left;
+                left: -450px;
+            }
+        }
+        #wagon { position: absolute; right: 0; bottom: 0; }
+        #bucher { position: absolute; z-index: 2; bottom: 170px; opacity: 1; }
+        #markus { position: absolute; z-index: 2; left: 180px; bottom: 125px; }
+        #zzz { position: absolute; left: 440px; }
+        #zzz > * { position: absolute; animation: blink 0.6s steps(1) infinite; }
+        #zzz img:nth-child(1) { animation-delay: 0s; }
+        #zzz img:nth-child(2) { animation-delay: 0.2s; }
+        #zzz img:nth-child(3) { animation-delay: 0.4s; }
+        #schaffner {
+            position: absolute;
+            right: 50px;
+            bottom: 125px;
+            transform: scale(0);
+            transform-origin: bottom center;
+        }
+        @keyframes blink {
+            0%   { opacity: 1; }
+            33%  { opacity: 0; }
+            100% { opacity: 0; }
+        }
+
+        /* TEST: On-Screen-Log (DEBUG = false blendet es aus) */
+        #log {
+            position: absolute; top: 80px; left: 10px; max-width: 460px;
+            background: rgba(0,0,0,.75); color: #0f0; font: 12px/1.4 monospace;
+            padding: 8px; border-radius: 4px; white-space: pre-wrap; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="schienen">
+        <div id="zug">
+            <!-- TEST: absolute Bild-URLs auf das Original, damit das Overlay überall gehostet werden kann -->
+            <img id="wagon"  src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/wagon.png" alt="">
+            <img id="bucher" src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/bucher.png" alt="">
+            <img id="markus" src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/markus.png" alt="">
+            <div id="zzz">
+                <img src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/z1.png" alt="">
+                <img src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/z2.png" alt="">
+                <img src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/z3.png" alt="">
+            </div>
+            <img id="schaffner" src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/schaffner.png" alt="">
+        </div>
+    </div>
+    <div id="log"></div>
+
+<script>
+  // ===== KONFIGURATION =====
+  const DEBUG       = true;   // TEST: On-Screen-Log + Konsole. Live: false
+  const SCROLL_HIN  = 1400;   // 1. Scroll-Event: links -> rechts
+  const SCROLL_RUCK = 4800;   // 2. Scroll-Event: rechts -> links
+  const DAUER       = 4;      // Sekunden pro Fahrt
+
+  const zug = document.querySelector('#zug');
+  const logEl = document.getElementById('log');
+  let breite, scaleVal, w;
+  let mutState;
+  let fahrt1 = false; // Scroll-Fahrt hin, 1x
+  let fahrt2 = false; // Scroll-Fahrt zurück, 1x
+
+  if (!DEBUG) logEl.style.display = 'none';
+  function log(msg) {
+    if (!DEBUG) return;
+    const line = '[overlay ' + new Date().toLocaleTimeString() + '] ' + msg;
+    console.log(line);
+    logEl.textContent = line + '\n' + logEl.textContent.split('\n').slice(0, 9).join('\n');
+  }
+
+  // ---- Größe ----
+  function setSize() {
+    w = document.documentElement.clientWidth;
+    if (w < 960) { breite = 450; scaleVal = -0.5; }
+    else         { breite = 900; scaleVal = -1; }
+  }
+
+  // ---- Animation (gemeinsam für Scroll + Klick) ----
+  function stopAll() {
+    gsap.killTweensOf([zug, '#schaffner', '#bucher']);
+  }
+  function resetCharacters() {
+    gsap.set('#schaffner', { scale: 0 });
+    gsap.set('#bucher', { rotate: 0, x: 0, opacity: 1 });
+  }
+  function animateCharacters() {
+    gsap.to('#schaffner', { scale: 1, delay: 1, duration: 0.75, ease: 'back.out' });
+    gsap.to('#bucher', { x: -300, opacity: 0, rotate: -50, duration: 1.5, ease: 'power1.out', delay: 2 });
+  }
+
+  // links -> rechts
+  function fahrtHin(quelle) {
+    if (breite === undefined) setSize();
+    stopAll();
+    gsap.set(zug, { x: 0, scaleX: Math.abs(scaleVal) });   // Start: links ausserhalb
+    gsap.set('#zzz', { scaleX: 1, x: 0, y: 0 });
+    resetCharacters();
+    gsap.to(zug, { duration: DAUER, x: window.innerWidth + breite * 2, ease: 'linear', overwrite: 'auto' });
+    animateCharacters();
+    log('START hin (links → rechts) – ' + quelle);
+  }
+
+  // rechts -> links
+  function fahrtRueck(quelle) {
+    if (breite === undefined) setSize();
+    stopAll();
+    // FIX gegenüber Rovo: Startposition rechts ausserhalb explizit setzen.
+    // Sonst fährt der Zug bei einem Klick ohne vorherige Hinfahrt von x:0 nach x:0 (= bewegt sich nicht).
+    gsap.set(zug, { x: window.innerWidth + breite * 2, scaleX: scaleVal });
+    gsap.set('#zzz', { scaleX: -1, x: 100, y: -20 });
+    resetCharacters();
+    gsap.to(zug, { duration: DAUER, x: 0, ease: 'linear', overwrite: 'auto' });
+    animateCharacters();
+    log('START zurück (rechts → links) – ' + quelle);
+  }
+
+  // ---- Messaging ----
+  function sendPm() {
+    window.top.postMessage({
+      name: 'mutInit',
+      payload: { mutScrollPosition: true, mutState: true, mutSize: true },
+      origin: 'game'
+    }, '*');
+    log('mutInit gesendet (origin: game)');
+  }
+
+  const fallbackTimer = setTimeout(sendPm, 1000);
+  let lastScrollLog = 0;
+
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || !d.name) return;
+
+    if (d.name === 'mutInitReady') { clearTimeout(fallbackTimer); sendPm(); }
+    if (d.name === 'mutState') { mutState = d.state; log('mutState = ' + d.state); }
+    if (d.name === 'mutSize') setSize();
+
+    // Auslöser 1: Scroll
+    if (d.name === 'mutScrollPosition') {
+      if (breite === undefined) setSize();
+      if (Date.now() - lastScrollLog > 1000) { lastScrollLog = Date.now(); log('Scroll: ' + Math.round(d.position) + 'px'); }
+
+      // FIX gegenüber Rovo: Läuft gerade eine Klick-Fahrt, wird die Scroll-Fahrt
+      // nicht abgebrochen, sondern beim nächsten Scroll-Event nach Fahrtende ausgelöst.
+      const frei = !gsap.isTweening(zug);
+      if (d.position >= SCROLL_HIN && !fahrt1 && frei)  { fahrt1 = true; fahrtHin('Scroll 1 (' + Math.round(d.position) + 'px)'); }
+      else if (d.position >= SCROLL_RUCK && !fahrt2 && frei) { fahrt2 = true; fahrtRueck('Scroll 2 (' + Math.round(d.position) + 'px)'); }
+    }
+
+    // Auslöser 2: CTA-Klick in der Sitebar (über initMessaging/mutForward)
+    if (d.name === 'mutForward' && d.payload?.action === 'ctaClick') {
+      if (gsap.isTweening(zug)) { log('CTA ignoriert (Zug fährt noch)'); return; }
+      d.payload.direction === 'rtl' ? fahrtRueck('CTA-Klick') : fahrtHin('CTA-Klick');
+    }
+  });
+</script>
+</body>
+</html>
