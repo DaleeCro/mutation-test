@@ -230,228 +230,142 @@
 		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
 		</div>
 	</div>
-			<script type="text/javascript">
-		// ------------------------------------------------------
-		// 1. URI PARAMS (WICHTIG FÜR CLICKTAGS IM CREATIVE)
-		// ------------------------------------------------------
-		var getUriParams = function() {
+				<!-- BEREINIGTE MUTATION & SCROLL-PINGPONG LOGIK -->
+	<script type="text/javascript">
+		var lastScrollY = 0;
+		var scrollDirection = "idle"; // "down", "up", "idle"
+		var isAnimating = false;
+		var pingPongTickerActive = false;
+
+		// 1. Initialer Handshake mit initMessaging.min.js
+		function sendPm() {
+			window.top.postMessage({
+				name: "mutInit",
+				origin: "sitebar",
+				payload: {
+					mutScrollPosition: true,
+					mutState: true
+				}
+			}, "*");
+		}
+
+		// Falls der Iframe geladen wird, bevor initMessaging bereit ist
+		const fallbackTimer = setTimeout(sendPm, 1000);
+
+		// 2. Empfang von initMessaging Nachrichten
+		window.addEventListener("message", function(e) {
+			const d = e.data;
+			if (!d || !d.name) return;
+
+			if (d.name === "mutInitReady") {
+				clearTimeout(fallbackTimer);
+				sendPm();
+			}
+
+			// Scroll-Event von der Hauptseite
+			if (d.name === "mutScrollPosition") {
+				const currentY = d.position; // Echtes Scroll-Y von derStandard
+
+				// Sitebar erst einblenden/anzeigen ab Scroll > 1px
+				const animContainer = document.getElementById("animation_container");
+				if (animContainer) {
+					animContainer.style.opacity = currentY > 50 ? "1" : "0";
+				}
+
+				// Wenn Canvas/Adobe Animate noch nicht geladen ist, abbrechen
+				if (typeof exportRoot === "undefined" || !exportRoot.timeline) return;
+
+				// Scroll-Richtung bestimmen
+				if (currentY > lastScrollY + 2) {
+					scrollDirection = "down"; // Vorwärts
+					startTimelinePlayback();
+				} else if (currentY < lastScrollY - 2) {
+					scrollDirection = "up";   // Rückwärts (Ping-Pong)
+					startTimelinePlayback();
+				}
+
+				lastScrollY = currentY;
+			}
+		}, false);
+
+		sendPm();
+
+		// 3. CreateJS Frame-Steuerung (Ping-Pong & Hard Stop am Ende)
+		function startTimelinePlayback() {
+			if (pingPongTickerActive) return;
+			pingPongTickerActive = true;
+
+			// Stoppt die native Vorwärts-Autoplay-Schleife von Animate
+			exportRoot.stop();
+
+			createjs.Ticker.addEventListener("tick", handleTimelineTick);
+		}
+
+		function handleTimelineTick(event) {
+			if (!exportRoot || !exportRoot.timeline) return;
+
+			var cur = exportRoot.currentFrame;
+			var total = exportRoot.timeline.duration - 1;
+
+			if (scrollDirection === "down") {
+				// Runterscrollen -> Vorwärts spielen bis zum letzten Frame
+				if (cur < total) {
+					exportRoot.gotoAndStop(cur + 1);
+				} else {
+					// Letzter Frame erreicht: STEHEN BLEIBEN (kein Loop!)
+					exportRoot.gotoAndStop(total);
+					stopPlayback();
+				}
+			} else if (scrollDirection === "up") {
+				// Raufscrollen -> Rückwärts spielen bis Frame 0
+				if (cur > 0) {
+					exportRoot.gotoAndStop(cur - 1);
+				} else {
+					// Frame 0 erreicht: STEHEN BLEIBEN
+					exportRoot.gotoAndStop(0);
+					stopPlayback();
+				}
+			} else {
+				stopPlayback();
+			}
+
+			// Stage aktualisieren
+			if (stage) stage.update();
+		}
+
+		function stopPlayback() {
+			pingPongTickerActive = false;
+			createjs.Ticker.removeEventListener("tick", handleTimelineTick);
+			scrollDirection = "idle";
+		}
+
+		// 4. Fallback-Timeout der Agentur deaktiviert (kein automatischer Loop nach 30s)
+		// Die Animation darf rein über den Scroll-Trigger gesteuert werden!
+
+		// 5. Clicktag-Handler (Standard)
+		var getUriParams = (function() {
 			var query_string = {};
 			var query = window.location.search.substring(1);
 			var parmsArray = query.split('&');
-			if(parmsArray.length <= 0) return query_string;
-			for(var i = 0; i < parmsArray.length; i++) {
+			for (var i = 0; i < parmsArray.length; i++) {
 				var pair = parmsArray[i].split('=');
-				var val = decodeURIComponent(pair[1]);
-				if (val != '' && pair[0] != '') query_string[pair[0]] = val;
+				if (pair[0]) query_string[pair[0]] = decodeURIComponent(pair[1] || "");
 			}
 			return query_string;
-		}();
+		})();
 
-		// ------------------------------------------------------
-		// 2. SCROLL & ANIMATION LOGIK (PING-PONG)
-		// ------------------------------------------------------
-		var scrollY = 0, windowHeight = 0, maxY = 0;
-		var lastScrollY = 0;
-		var dummy = false; // Auf true setzen für lokales Testing ohne ADITION
-		
-		var animationState = {
-		    isPlaying: false,
-		    direction: 'forward', 
-		    currentFrame: 0,
-		    totalFrames: 0,
-		    hasStarted: false,
-		    scrollDirection: 'down',
-		    scrollThreshold: 2 // Verhindert Zittern bei minimalem Scroll
-		};
-
-		function startAnimation() {
-		    if (typeof(exportRoot) === 'undefined') {
-		        console.warn('[Animation] exportRoot not ready yet');
-		        return;
-		    }
-		    
-		    // Total Frames aus CreateJS Timeline lesen
-		    // CreateJS: timeline.duration gibt Ticks zurück, was bei 1:1 = Frames ist
-		    // Fallback: 447 Frames (bekannt aus index.js)
-		    var duration = exportRoot.timeline.duration;
-		    var totalFrames = exportRoot.totalFrames;
-		    
-		    console.log('[Animation] Timeline duration:', duration);
-		    console.log('[Animation] Total frames:', totalFrames);
-		    console.log('[Animation] Timeline object:', exportRoot.timeline);
-		    
-		    // Verschiedene Methoden um Frame-Anzahl zu bekommen
-		    if (totalFrames && totalFrames > 0) {
-		        animationState.totalFrames = totalFrames - 1;
-		    } else if (duration && duration > 0) {
-		        animationState.totalFrames = duration - 1;
-		    } else {
-		        // Fallback: Bekannte Frame-Anzahl aus index.js
-		        animationState.totalFrames = 446; // 447 Frames, 0-indexed
-		        console.log('[Animation] Using fallback: 447 frames');
-		    }
-		    
-		    console.log('[Animation] Total frames set to:', animationState.totalFrames);
-		    
-		    animationState.currentFrame = 0;
-		    animationState.isPlaying = true;
-		    animationState.hasStarted = true;
-		    animationState.direction = 'forward';
-		    
-		    console.log('[Animation] Starting animation loop');
-		    
-		    // Start Loop
-		    requestAnimationFrame(animationLoop);
-		}
-
-		function animationLoop() {
-		    if (!animationState.isPlaying || typeof(exportRoot) === 'undefined') {
-		        console.log('[Animation] Loop stopped - isPlaying:', animationState.isPlaying);
-		        return;
-		    }
-		    
-		    // Frame Update
-		    if (animationState.direction === 'forward') {
-		        animationState.currentFrame += 1;
-		        if (animationState.currentFrame >= animationState.totalFrames) {
-		            animationState.currentFrame = animationState.totalFrames;
-		            animationState.isPlaying = false; // Stop am Ende
-		            exportRoot.gotoAndStop(animationState.currentFrame);
-		            console.log('[Animation] Reached end frame:', animationState.currentFrame);
-		            return;
-		        }
-		    } else { 
-		        animationState.currentFrame -= 1;
-		        if (animationState.currentFrame <= 0) {
-		            animationState.currentFrame = 0;
-		            animationState.isPlaying = false; // Stop am Anfang
-		            exportRoot.gotoAndStop(animationState.currentFrame);
-		            console.log('[Animation] Reached start frame');
-		            return;
-		        }
-		    }
-		    
-		    exportRoot.gotoAndStop(Math.round(animationState.currentFrame));
-		    
-		    // Debug: Log every 50 frames
-		    if (animationState.currentFrame % 50 === 0) {
-		        console.log('[Animation] Current frame:', animationState.currentFrame);
-		    }
-		    
-		    requestAnimationFrame(animationLoop);
-		}
-
-		function handleScroll() {
-		    var scrollDelta = scrollY - lastScrollY;
-		    
-		    // Threshold gegen Zittern
-		    if (Math.abs(scrollDelta) < animationState.scrollThreshold) return;
-		    
-		    var newDirection = scrollDelta > 0 ? 'down' : 'up';
-		    
-		    console.log('[Scroll] Y:', scrollY, 'Delta:', scrollDelta, 'Direction:', newDirection);
-		    
-		    // ERSTER SCROLL -> START
-		    if (!animationState.hasStarted) {
-		        console.log('[Scroll] First scroll - starting animation');
-		        startAnimation();
-		        lastScrollY = scrollY;
-		        return;
-		    }
-		    
-		    // RICHTUNGSWECHSEL -> REVERSE
-		    if (newDirection !== animationState.scrollDirection) {
-		        console.log('[Scroll] Direction change:', animationState.scrollDirection, '->', newDirection);
-		        animationState.scrollDirection = newDirection;
-		        
-		        if (newDirection === 'down') {
-		            animationState.direction = 'forward';
-		        } else { 
-		            animationState.direction = 'backward';
-		        }
-		        
-		        // Re-Activate wenn gestoppt
-		        if (!animationState.isPlaying) {
-		             animationState.isPlaying = true;
-		             console.log('[Scroll] Reactivating animation loop');
-		             requestAnimationFrame(animationLoop);
-		        }
-		    }
-		    
-		    lastScrollY = scrollY;
-		}
-
-		// ------------------------------------------------------
-		// 3. EVENT LISTENER SETUP (DUMMY VS REAL)
-		// ------------------------------------------------------
-		if (dummy == true) {
-		    console.log("Test Scrolling (Dummy Mode)");
-		    maxY = window.parent.document.body.scrollHeight - window.parent.innerHeight;
-		    scrollY = window.parent.scrollY || window.parent.pageYOffset;
-		    lastScrollY = scrollY;
-		    
-		    window.parent.addEventListener("scroll", function() {
-		        scrollY = window.parent.scrollY || window.parent.pageYOffset;
-		        handleScroll();
-		    });
-		} else {
-		    // ADITION / MUTATION RELAY
-		    window.addEventListener("message", function (msg) {
-		        if (msg.data && msg.data.scrollY !== undefined) {
-		            maxY = msg.data.docHeight - msg.data.windowHeight;
-		            scrollY = msg.data.scrollY;
-		            windowHeight = msg.data.windowHeight;
-		            handleScroll();
-		        }
-		    }, false);
-		}
-
-		// ------------------------------------------------------
-		// 4. CTA & MAGIC CLICKTAG (BESTEHEND)
-		// ------------------------------------------------------
+		// 6. Magic Clicktag (CTA an Overlay weiterleiten)
 		function magicClicktag() {
-		    console.log("Magic Clicktag!");
-		    window.top.postMessage({
-		        name: 'mutForward',
-		        origin: 'sitebar',
-		        payload: {
-		            target: 'game',
-		            action: 'fly',
-		            direction: 'ltr'
-		        }
-		    }, '*');
+			window.top.postMessage({
+				name: 'mutForward',
+				origin: 'sitebar',
+				payload: {
+					target: 'game',
+					action: 'fly',
+					direction: 'ltr'
+				}
+			}, '*');
 		}
-
-		// ------------------------------------------------------
-		// 5. VISIBILITY & MUT INIT (BESTEHEND)
-		// ------------------------------------------------------
-		function sendPm() {
-		    window.top.postMessage({
-		        name: "mutInit",
-		        payload: { mutScrollPosition: true },
-		        origin: "sitebar"
-		    }, "*");
-		}
-
-		window.addEventListener("message", function(e) {
-		    if (e.data && e.data.name === "mutScrollPosition") {
-		        const sitebar = document.getElementById("animation_container");
-		        if (sitebar) {
-		            sitebar.style.opacity = (e.data.position >= 1) ? "1" : "0";
-		        }
-		    }
-		}, false);
-
-		// Init
-		sendPm();
-		
-		// Fallback: Start nach 30s falls User nie scrollt (Safety-Net)
-		setTimeout(function(){ 
-			if (!animationState.hasStarted && typeof(exportRoot) !== 'undefined') {
-				console.log("Fallback: Auto-start animation");
-				startAnimation();
-			}
-		}, 30000);
 	</script>
 </body>
 </html>
