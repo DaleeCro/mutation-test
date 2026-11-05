@@ -1,180 +1,415 @@
 <!DOCTYPE html>
-<html lang="de">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Overlay Zug (Scroll + CTA)</title>
-    <script src="https://at.staticfiles.at/snippets/mkt/statisch/gsap-business/minified/gsap.min.js"></script>
-    <style>
-        html, body { margin: 0; overflow: hidden; background: transparent; }
-        #schienen { width: 100vw; }
-        #zug {
-            width: 900px;
-            height: 474px;
-            position: absolute;
-            bottom: 0;
-            left: -900px;
-        }
-        @media screen and (max-width: 960px) {
-            #zug {
-                transform: scale(0.5);
-                transform-origin: bottom left;
-                left: -450px;
-            }
-        }
-        #wagon { position: absolute; right: 0; bottom: 0; }
-        #bucher { position: absolute; z-index: 2; bottom: 170px; opacity: 1; }
-        #markus { position: absolute; z-index: 2; left: 180px; bottom: 125px; }
-        #zzz { position: absolute; left: 440px; }
-        #zzz > * { position: absolute; animation: blink 0.6s steps(1) infinite; }
-        #zzz img:nth-child(1) { animation-delay: 0s; }
-        #zzz img:nth-child(2) { animation-delay: 0.2s; }
-        #zzz img:nth-child(3) { animation-delay: 0.4s; }
-        #schaffner {
-            position: absolute;
-            right: 50px;
-            bottom: 125px;
-            transform: scale(0);
-            transform-origin: bottom center;
-        }
-        @keyframes blink {
-            0%   { opacity: 1; }
-            33%  { opacity: 0; }
-            100% { opacity: 0; }
-        }
+	<meta charset="UTF-8">
+	<title>SitebarXL ScrollAd</title>
+	<meta name="ad.size" content="width=1000,height=1000">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<script type="text/javascript">
+	</script>
+	<style>
+		html, body {
+			overflow: hidden;
+			background: transparent;
+			width:100%;
+			height:100%;
+			max-width: 1000px;
+			max-height: 1000px;
+		}
+		body {
+			transition: opacity 0.05s;
+		}
+		#animation_container {
+			cursor: pointer; /* GDN */
+			position:absolute;
+			top:0px;
+			min-width: 600px !important;
+			min-height: 600px !important;
+			opacity: 0;
+			transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+		}
+	</style>
+	<script src="createjs_2019.11.15_min.js"></script>
+	<script src="index.js"></script>
+	<script>
+		var canvas, stage, exportRoot, anim_container, dom_overlay_container, fnStartAnimation;
+		var reverse = false;
+		function init() {
+			canvas = document.getElementById("canvas");
+			anim_container = document.getElementById("animation_container");
+			dom_overlay_container = document.getElementById("dom_overlay_container");
+			var comp=AdobeAn.getComposition(Object.keys(AdobeAn.compositions)[0]);
+			var lib=comp.getLibrary();
+			var loader = new createjs.LoadQueue(false);
+			loader.addEventListener("fileload", function(evt){handleFileLoad(evt,comp)});
+			loader.addEventListener("complete", function(evt){handleComplete(evt,comp)});
+			var lib=comp.getLibrary();
+			if (lib.properties.manifest.length < 1) { handleComplete({}, comp);
+		} else { 
+			var loader = new createjs.LoadQueue(false);
+			loader.addEventListener("fileload", function(evt) { handleFileLoad(evt, comp) });
+			loader.addEventListener("complete", function(evt) { handleComplete(evt, comp) });
+			var lib = comp.getLibrary(); loader.loadManifest(lib.properties.manifest); }
+		}
+		function handleFileLoad(evt, comp) {
+			var images=comp.getImages();	
+			if (evt && (evt.item.type == "image")) { images[evt.item.id] = evt.result; }	
+		}
+		function handleComplete(evt,comp) {
+			var lib=comp.getLibrary();
+			var ss=comp.getSpriteSheet();
+			var queue = evt.target;
+			var ssMetadata = lib.ssMetadata;
+			for(i=0; i<ssMetadata.length; i++) {
+				ss[ssMetadata[i].name] = new createjs.SpriteSheet( {"images": [queue.getResult(ssMetadata[i].name)], "frames": ssMetadata[i].frames} )
+			}
+			exportRoot = new lib.index();
+			
 
-        /* TEST: On-Screen-Log (DEBUG = false blendet es aus) */
-        #log {
-            position: absolute; top: 80px; left: 10px; max-width: 460px;
-            background: rgba(0,0,0,.75); color: #0f0; font: 12px/1.4 monospace;
-            padding: 8px; border-radius: 4px; white-space: pre-wrap; z-index: 10;
-        }
-    </style>
+// COMMENT
+// ELEMENT POSITIONING - Init
+			window.positionedElements = [];
+
+// Add elements to queue here
+			//adjustElementPosition(exportRoot.close, "left");
+			//adjustElementPosition(exportRoot.close, "right");
+
+// ELEMENT POSITIONING - Apply
+			adjustElementPosition(null, null);
+
+			stage = new lib.Stage(canvas);
+			stage.enableMouseOver();	
+			fnStartAnimation = function() {
+				stage.addChild(exportRoot);
+				createjs.Ticker.setFPS(lib.properties.fps);
+				createjs.Ticker.addEventListener("tick", stage);
+			}	    
+			function makeResponsive(isResp, respDim, isScale, scaleType) {		
+				var lastW, lastH, lastS=1;		
+				window.addEventListener('resize', resizeCanvas);		
+				resizeCanvas();		
+				function resizeCanvas() {
+					var iw = window.innerWidth;
+
+    // Add a condition to check if iw is less than 300px
+					if (iw < 300) {
+						iw = 300;
+        //return; // Exit the function and do nothing
+					}
+
+					var w = lib.properties.width, h = lib.properties.height;
+					var ih = window.innerHeight;
+					var pRatio = window.devicePixelRatio || 1, xRatio = iw / w, yRatio = ih / h, sRatio = 1;
+
+					if (isResp) {
+						if ((respDim == 'width' && lastW == iw) || (respDim == 'height' && lastH == ih)) {
+							sRatio = lastS;
+						} else if (!isScale) {
+							if (iw < w || ih < h)
+								sRatio = Math.min(xRatio, yRatio);
+						} else if (scaleType == 1) {
+							sRatio = Math.min(xRatio, yRatio);
+						} else if (scaleType == 2) {
+							sRatio = Math.max(xRatio, yRatio);
+						}
+					}
+
+					canvas.width = w * pRatio * sRatio;
+					canvas.height = h * pRatio * sRatio;
+					canvas.style.width = dom_overlay_container.style.width = anim_container.style.width = w * sRatio + 'px';
+					canvas.style.height = anim_container.style.height = dom_overlay_container.style.height = h * sRatio + 'px';
+					stage.scaleX = pRatio * sRatio;
+					stage.scaleY = pRatio * sRatio;
+					lastW = iw;
+					lastH = ih;
+					lastS = sRatio;
+					canvas.style.width = dom_overlay_container.style.width = anim_container.style.width = (ih * (canvas.height / canvas.width)) + 'px';
+					canvas.style.height = anim_container.style.height = dom_overlay_container.style.height = ih + 'px';
+
+					if (iw < ih) {
+						anim_container.style.left = ((iw - ih) / 2) + "px";
+						window.widthOffsetPerc = (1 - (document.body.offsetWidth / document.body.offsetHeight)) * -1;
+						if (iw < (ih / 2)) {
+							window.widthOffsetPerc = -0.5;
+							canvas.style.width = dom_overlay_container.style.width = anim_container.style.width = (iw * 2) + 'px';
+							canvas.style.height = anim_container.style.height = dom_overlay_container.style.height = (iw * 2) + 'px';
+							anim_container.style.left = ((iw / 2) * -1) + "px";
+						}
+					} else {
+						anim_container.style.left = "0px";
+						window.widthOffsetPerc = 0;
+					}
+					stage.tickOnUpdate = false;
+					stage.update();
+					stage.tickOnUpdate = true;
+					adjustElementPosition(null, null);
+				}
+
+				//CALL THE FUNCTION TO ADJUST THE ELEMENTS OUTSIDE OF THE SAFE AREA
+				adjustElementPosition(null, null);
+				
+			}
+			makeResponsive(false,'both',false,1);	
+			AdobeAn.compositionLoaded(lib.properties.id);
+			fnStartAnimation();
+			if (dummy == true) {
+				scrolling();
+			}
+			document.getElementsByTagName('canvas')[0].addEventListener("mousedown", function(e) { if(e.button == 2) window.contextMenu = true; }, false);
+		}
+
+		//FUNCTION TO ADJUST THE ELEMENTS OUTSIDE OF THE SAFE AREA
+		function adjustElementPosition(targetElement, alignment) {
+			const referenceWidth = 1000;
+			const viewportRatio = window.innerWidth / window.innerHeight;
+
+			if (targetElement !== null) {
+				// Store element information
+				window.positionedElements = window.positionedElements || [];
+				const elementInfo = {
+					obj: targetElement,
+					x: targetElement.x,
+					y: targetElement.y,
+					align: alignment
+				};
+				window.positionedElements.push(elementInfo);
+			} else {
+				// Reposition the elements
+				const elements = window.positionedElements || [];
+
+				for (let i = 0; i < elements.length; i++) {
+					const element = elements[i];
+					const elementWidth = element.obj.offsetWidth;
+					const isHalfCanvasWidth = window.innerWidth <= (elementWidth / 2);
+					const isFullCanvasWidth = window.innerWidth >= elementWidth;
+
+					if (isFullCanvasWidth) {
+						element.obj.x = element.x;
+					} else if (isHalfCanvasWidth) {
+						const quarterWidth = referenceWidth / 4;
+						if (element.align === "right") {
+							element.obj.x = element.x - quarterWidth;
+						}
+						if (element.align === "left") {
+							element.obj.x = element.x + quarterWidth;
+						}
+					} else {
+						const xOffset = (referenceWidth - referenceWidth * viewportRatio) / 2;
+						if (element.align === "right") {
+							console.log(element.x - xOffset);
+							if ( (element.x - xOffset) >= 732.65 ) {
+								element.obj.x = element.x - xOffset;
+							} else {
+								element.obj.x = 732.65;
+							}
+							if ((element.x - xOffset) > 982.65) {
+								element.obj.x = 982.65;
+							}
+							console.log(element.obj.x);
+						}
+						if (element.align === "left") {
+							if ( (element.x + xOffset) <= 313 ) {
+								element.obj.x = element.x + xOffset;
+							} else {
+								element.obj.x = 313;
+							}
+							if ((element.x + xOffset) < 77.4) {
+								element.obj.x = 77.4;
+							}
+						}
+					}
+				}
+			}
+		}
+		var timeline;
+	</script>
 </head>
-<body>
-    <div id="schienen">
-        <div id="zug">
-            <!-- TEST: absolute Bild-URLs auf das Original, damit das Overlay überall gehostet werden kann -->
-            <img id="wagon"  src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/wagon.png" alt="">
-            <img id="bucher" src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/bucher.png" alt="">
-            <img id="markus" src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/markus.png" alt="">
-            <div id="zzz">
-                <img src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/z1.png" alt="">
-                <img src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/z2.png" alt="">
-                <img src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/z3.png" alt="">
-            </div>
-            <img id="schaffner" src="https://at.staticfiles.at/snippets/mkt/gdm/mutation/2025/1003_Klimaticket/GameOverlay/img/schaffner.png" alt="">
-        </div>
-    </div>
-    <div id="log"></div>
+<body id="adBody" onload="init();" style="margin:0px;opacity:1;">
+	<div id="animation_container" style="background-color:transparent; width:1000px; height:1000px; min-width: 600px !important; min-height: 600px !important;">
+		<canvas id="canvas" width="1000" height="1000" style="position: absolute; display: block; background-color:transparent;"></canvas>
+		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
+		</div>
+	</div>
+		<script type="text/javascript">
+		// ------------------------------------------------------
+		// 1. URI PARAMS (WICHTIG FÜR CLICKTAGS IM CREATIVE)
+		// ------------------------------------------------------
+		var getUriParams = function() {
+			var query_string = {};
+			var query = window.location.search.substring(1);
+			var parmsArray = query.split('&');
+			if(parmsArray.length <= 0) return query_string;
+			for(var i = 0; i < parmsArray.length; i++) {
+				var pair = parmsArray[i].split('=');
+				var val = decodeURIComponent(pair[1]);
+				if (val != '' && pair[0] != '') query_string[pair[0]] = val;
+			}
+			return query_string;
+		}();
 
-<script>
-  // ===== KONFIGURATION =====
-  const DEBUG       = true;   // TEST: On-Screen-Log + Konsole. Live: false
-  const SCROLL_HIN  = 1400;   // 1. Scroll-Event: links -> rechts
-  const SCROLL_RUCK = 4800;   // 2. Scroll-Event: rechts -> links
-  const DAUER       = 4;      // Sekunden pro Fahrt
+		// ------------------------------------------------------
+		// 2. SCROLL & ANIMATION LOGIK (PING-PONG)
+		// ------------------------------------------------------
+		var scrollY = 0, windowHeight = 0, maxY = 0;
+		var lastScrollY = 0;
+		var dummy = false; // Auf true setzen für lokales Testing ohne ADITION
+		
+		var animationState = {
+		    isPlaying: false,
+		    direction: 'forward', 
+		    currentFrame: 0,
+		    totalFrames: 0,
+		    hasStarted: false,
+		    scrollDirection: 'down',
+		    scrollThreshold: 2 // Verhindert Zittern bei minimalem Scroll
+		};
 
-  const zug = document.querySelector('#zug');
-  const logEl = document.getElementById('log');
-  let breite, scaleVal, w;
-  let mutState;
-  let fahrt1 = false; // Scroll-Fahrt hin, 1x
-  let fahrt2 = false; // Scroll-Fahrt zurück, 1x
+		function startAnimation() {
+		    if (typeof(exportRoot) === 'undefined') return;
+		    
+		    // Total Frames aus CreateJS Timeline lesen
+		    animationState.totalFrames = exportRoot.timeline.duration - 1;
+		    animationState.currentFrame = 0;
+		    animationState.isPlaying = true;
+		    animationState.hasStarted = true;
+		    animationState.direction = 'forward';
+		    
+		    // Start Loop
+		    requestAnimationFrame(animationLoop);
+		}
 
-  if (!DEBUG) logEl.style.display = 'none';
-  function log(msg) {
-    if (!DEBUG) return;
-    const line = '[overlay ' + new Date().toLocaleTimeString() + '] ' + msg;
-    console.log(line);
-    logEl.textContent = line + '\n' + logEl.textContent.split('\n').slice(0, 9).join('\n');
-  }
+		function animationLoop() {
+		    if (!animationState.isPlaying || typeof(exportRoot) === 'undefined') return;
+		    
+		    // Frame Update
+		    if (animationState.direction === 'forward') {
+		        animationState.currentFrame += 1;
+		        if (animationState.currentFrame >= animationState.totalFrames) {
+		            animationState.currentFrame = animationState.totalFrames;
+		            animationState.isPlaying = false; // Stop am Ende
+		            exportRoot.gotoAndStop(animationState.currentFrame);
+		            return;
+		        }
+		    } else { 
+		        animationState.currentFrame -= 1;
+		        if (animationState.currentFrame <= 0) {
+		            animationState.currentFrame = 0;
+		            animationState.isPlaying = false; // Stop am Anfang
+		            exportRoot.gotoAndStop(animationState.currentFrame);
+		            return;
+		        }
+		    }
+		    
+		    exportRoot.gotoAndStop(Math.round(animationState.currentFrame));
+		    requestAnimationFrame(animationLoop);
+		}
 
-  // ---- Größe ----
-  function setSize() {
-    w = document.documentElement.clientWidth;
-    if (w < 960) { breite = 450; scaleVal = -0.5; }
-    else         { breite = 900; scaleVal = -1; }
-  }
+		function handleScroll() {
+		    var scrollDelta = scrollY - lastScrollY;
+		    
+		    // Threshold gegen Zittern
+		    if (Math.abs(scrollDelta) < animationState.scrollThreshold) return;
+		    
+		    var newDirection = scrollDelta > 0 ? 'down' : 'up';
+		    
+		    // ERSTER SCROLL -> START
+		    if (!animationState.hasStarted) {
+		        startAnimation();
+		        lastScrollY = scrollY;
+		        return;
+		    }
+		    
+		    // RICHTUNGSWECHSEL -> REVERSE
+		    if (newDirection !== animationState.scrollDirection) {
+		        animationState.scrollDirection = newDirection;
+		        
+		        if (newDirection === 'down') {
+		            animationState.direction = 'forward';
+		        } else { 
+		            animationState.direction = 'backward';
+		        }
+		        
+		        // Re-Activate wenn gestoppt
+		        if (!animationState.isPlaying) {
+		             animationState.isPlaying = true;
+		             requestAnimationFrame(animationLoop);
+		        }
+		    }
+		    
+		    lastScrollY = scrollY;
+		}
 
-  // ---- Animation (gemeinsam für Scroll + Klick) ----
-  function stopAll() {
-    gsap.killTweensOf([zug, '#schaffner', '#bucher']);
-  }
-  function resetCharacters() {
-    gsap.set('#schaffner', { scale: 0 });
-    gsap.set('#bucher', { rotate: 0, x: 0, opacity: 1 });
-  }
-  function animateCharacters() {
-    gsap.to('#schaffner', { scale: 1, delay: 1, duration: 0.75, ease: 'back.out' });
-    gsap.to('#bucher', { x: -300, opacity: 0, rotate: -50, duration: 1.5, ease: 'power1.out', delay: 2 });
-  }
+		// ------------------------------------------------------
+		// 3. EVENT LISTENER SETUP (DUMMY VS REAL)
+		// ------------------------------------------------------
+		if (dummy == true) {
+		    console.log("Test Scrolling (Dummy Mode)");
+		    maxY = window.parent.document.body.scrollHeight - window.parent.innerHeight;
+		    scrollY = window.parent.scrollY || window.parent.pageYOffset;
+		    lastScrollY = scrollY;
+		    
+		    window.parent.addEventListener("scroll", function() {
+		        scrollY = window.parent.scrollY || window.parent.pageYOffset;
+		        handleScroll();
+		    });
+		} else {
+		    // ADITION / MUTATION RELAY
+		    window.addEventListener("message", function (msg) {
+		        if (msg.data && msg.data.scrollY !== undefined) {
+		            maxY = msg.data.docHeight - msg.data.windowHeight;
+		            scrollY = msg.data.scrollY;
+		            windowHeight = msg.data.windowHeight;
+		            handleScroll();
+		        }
+		    }, false);
+		}
 
-  // links -> rechts
-  function fahrtHin(quelle) {
-    if (breite === undefined) setSize();
-    stopAll();
-    gsap.set(zug, { x: 0, scaleX: Math.abs(scaleVal) });   // Start: links ausserhalb
-    gsap.set('#zzz', { scaleX: 1, x: 0, y: 0 });
-    resetCharacters();
-    gsap.to(zug, { duration: DAUER, x: window.innerWidth + breite * 2, ease: 'linear', overwrite: 'auto' });
-    animateCharacters();
-    log('START hin (links → rechts) – ' + quelle);
-  }
+		// ------------------------------------------------------
+		// 4. CTA & MAGIC CLICKTAG (BESTEHEND)
+		// ------------------------------------------------------
+		function magicClicktag() {
+		    console.log("Magic Clicktag!");
+		    window.top.postMessage({
+		        name: 'mutForward',
+		        origin: 'sitebar',
+		        payload: {
+		            target: 'game',
+		            action: 'fly',
+		            direction: 'ltr'
+		        }
+		    }, '*');
+		}
 
-  // rechts -> links
-  function fahrtRueck(quelle) {
-    if (breite === undefined) setSize();
-    stopAll();
-    // FIX gegenüber Rovo: Startposition rechts ausserhalb explizit setzen.
-    // Sonst fährt der Zug bei einem Klick ohne vorherige Hinfahrt von x:0 nach x:0 (= bewegt sich nicht).
-    gsap.set(zug, { x: window.innerWidth + breite * 2, scaleX: scaleVal });
-    gsap.set('#zzz', { scaleX: -1, x: 100, y: -20 });
-    resetCharacters();
-    gsap.to(zug, { duration: DAUER, x: 0, ease: 'linear', overwrite: 'auto' });
-    animateCharacters();
-    log('START zurück (rechts → links) – ' + quelle);
-  }
+		// ------------------------------------------------------
+		// 5. VISIBILITY & MUT INIT (BESTEHEND)
+		// ------------------------------------------------------
+		function sendPm() {
+		    window.top.postMessage({
+		        name: "mutInit",
+		        payload: { mutScrollPosition: true },
+		        origin: "sitebar"
+		    }, "*");
+		}
 
-  // ---- Messaging ----
-  function sendPm() {
-    window.top.postMessage({
-      name: 'mutInit',
-      payload: { mutScrollPosition: true, mutState: true, mutSize: true },
-      origin: 'game'
-    }, '*');
-    log('mutInit gesendet (origin: game)');
-  }
+		window.addEventListener("message", function(e) {
+		    if (e.data && e.data.name === "mutScrollPosition") {
+		        const sitebar = document.getElementById("animation_container");
+		        if (sitebar) {
+		            sitebar.style.opacity = (e.data.position >= 1) ? "1" : "0";
+		        }
+		    }
+		}, false);
 
-  const fallbackTimer = setTimeout(sendPm, 1000);
-  let lastScrollLog = 0;
-
-  window.addEventListener('message', (e) => {
-    const d = e.data;
-    if (!d || !d.name) return;
-
-    if (d.name === 'mutInitReady') { clearTimeout(fallbackTimer); sendPm(); }
-    if (d.name === 'mutState') { mutState = d.state; log('mutState = ' + d.state); }
-    if (d.name === 'mutSize') setSize();
-
-    // Auslöser 1: Scroll
-    if (d.name === 'mutScrollPosition') {
-      if (breite === undefined) setSize();
-      if (Date.now() - lastScrollLog > 1000) { lastScrollLog = Date.now(); log('Scroll: ' + Math.round(d.position) + 'px'); }
-
-      // FIX gegenüber Rovo: Läuft gerade eine Klick-Fahrt, wird die Scroll-Fahrt
-      // nicht abgebrochen, sondern beim nächsten Scroll-Event nach Fahrtende ausgelöst.
-      const frei = !gsap.isTweening(zug);
-      if (d.position >= SCROLL_HIN && !fahrt1 && frei)  { fahrt1 = true; fahrtHin('Scroll 1 (' + Math.round(d.position) + 'px)'); }
-      else if (d.position >= SCROLL_RUCK && !fahrt2 && frei) { fahrt2 = true; fahrtRueck('Scroll 2 (' + Math.round(d.position) + 'px)'); }
-    }
-
-    // Auslöser 2: CTA-Klick in der Sitebar (über initMessaging/mutForward)
-    if (d.name === 'mutForward' && d.payload?.action === 'ctaClick') {
-      if (gsap.isTweening(zug)) { log('CTA ignoriert (Zug fährt noch)'); return; }
-      d.payload.direction === 'rtl' ? fahrtRueck('CTA-Klick') : fahrtHin('CTA-Klick');
-    }
-  });
-</script>
+		// Init
+		sendPm();
+		
+		// Fallback: Start nach 30s falls User nie scrollt (Safety-Net)
+		setTimeout(function(){ 
+			if (!animationState.hasStarted && typeof(exportRoot) !== 'undefined') {
+				console.log("Fallback: Auto-start animation");
+				startAnimation();
+			}
+		}, 30000);
+	</script>
 </body>
 </html>
