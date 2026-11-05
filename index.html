@@ -229,13 +229,17 @@
 		<canvas id="canvas" width="1000" height="1000" style="position: absolute; display: block; background-color:transparent;"></canvas>
 		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
 		</div>
+		<!-- MAGIC CLICKTAG CTA BUTTON (Löst die Pokale im Overlay aus) -->
+		<button id="cta" type="button" onclick="magicClicktag()" style="position: absolute; z-index: 1000; bottom: 40px; left: 50%; transform: translateX(-50%); padding: 12px 24px; cursor: pointer; background: transparent; border: none; font-size: 0; width: 100%; height: 100px;">
+			Test-Animation starten
+		</button>
 	</div>
-				<!-- BEREINIGTE MUTATION & SCROLL-PINGPONG LOGIK -->
+	<!-- BEREINIGTE MUTATION, SCROLL-PAUSE & MAGIC-CLICKTAG LOGIK -->
 	<script type="text/javascript">
 		var lastScrollY = 0;
 		var scrollDirection = "idle"; // "down", "up", "idle"
-		var isAnimating = false;
 		var pingPongTickerActive = false;
+		var scrollStopTimeout = null;
 
 		// 1. Initialer Handshake mit initMessaging.min.js
 		function sendPm() {
@@ -249,10 +253,9 @@
 			}, "*");
 		}
 
-		// Falls der Iframe geladen wird, bevor initMessaging bereit ist
 		const fallbackTimer = setTimeout(sendPm, 1000);
 
-		// 2. Empfang von initMessaging Nachrichten
+		// 2. Empfang von Scroll- und Init-Events von der Hauptseite
 		window.addEventListener("message", function(e) {
 			const d = e.data;
 			if (!d || !d.name) return;
@@ -262,42 +265,45 @@
 				sendPm();
 			}
 
-			// Scroll-Event von der Hauptseite
 			if (d.name === "mutScrollPosition") {
-				const currentY = d.position; // Echtes Scroll-Y von derStandard
+				const currentY = d.position;
 
-				// Sitebar erst einblenden/anzeigen ab Scroll > 1px
+				// Sitebar einblenden ab Scroll > 50px
 				const animContainer = document.getElementById("animation_container");
 				if (animContainer) {
 					animContainer.style.opacity = currentY > 50 ? "1" : "0";
 				}
 
-				// Wenn Canvas/Adobe Animate noch nicht geladen ist, abbrechen
 				if (typeof exportRoot === "undefined" || !exportRoot.timeline) return;
 
-				// Scroll-Richtung bestimmen
-				if (currentY > lastScrollY + 2) {
+				// Scroll-Richtung ermitteln
+				if (currentY > lastScrollY + 1) {
 					scrollDirection = "down"; // Vorwärts
 					startTimelinePlayback();
-				} else if (currentY < lastScrollY - 2) {
-					scrollDirection = "up";   // Rückwärts (Ping-Pong)
+				} else if (currentY < lastScrollY - 1) {
+					scrollDirection = "up";   // Rückwärts
 					startTimelinePlayback();
 				}
 
 				lastScrollY = currentY;
+
+				// === SCROLL-STOP ERKENNUNG ===
+				// Sobald für 100ms kein Scroll-Event mehr kommt, pausiert die Animation sofort!
+				clearTimeout(scrollStopTimeout);
+				scrollStopTimeout = setTimeout(function() {
+					stopPlayback();
+				}, 100);
 			}
 		}, false);
 
 		sendPm();
 
-		// 3. CreateJS Frame-Steuerung (Ping-Pong & Hard Stop am Ende)
+		// 3. CreateJS Frame-Steuerung (Schrittweise bei Scroll, Pause bei Stop)
 		function startTimelinePlayback() {
 			if (pingPongTickerActive) return;
 			pingPongTickerActive = true;
 
-			// Stoppt die native Vorwärts-Autoplay-Schleife von Animate
-			exportRoot.stop();
-
+			exportRoot.stop(); // Standardmäßiges Autoplay von CreateJS stoppen
 			createjs.Ticker.addEventListener("tick", handleTimelineTick);
 		}
 
@@ -308,28 +314,25 @@
 			var total = exportRoot.timeline.duration - 1;
 
 			if (scrollDirection === "down") {
-				// Runterscrollen -> Vorwärts spielen bis zum letzten Frame
+				// Runterscrollen -> Vorwärts animieren
 				if (cur < total) {
 					exportRoot.gotoAndStop(cur + 1);
 				} else {
-					// Letzter Frame erreicht: STEHEN BLEIBEN (kein Loop!)
-					exportRoot.gotoAndStop(total);
+					exportRoot.gotoAndStop(total); // Am Ende stehenbleiben (kein Loop!)
 					stopPlayback();
 				}
 			} else if (scrollDirection === "up") {
-				// Raufscrollen -> Rückwärts spielen bis Frame 0
+				// Raufscrollen -> Rückwärts animieren
 				if (cur > 0) {
 					exportRoot.gotoAndStop(cur - 1);
 				} else {
-					// Frame 0 erreicht: STEHEN BLEIBEN
-					exportRoot.gotoAndStop(0);
+					exportRoot.gotoAndStop(0); // Am Anfang stehenbleiben
 					stopPlayback();
 				}
 			} else {
 				stopPlayback();
 			}
 
-			// Stage aktualisieren
 			if (stage) stage.update();
 		}
 
@@ -337,12 +340,39 @@
 			pingPongTickerActive = false;
 			createjs.Ticker.removeEventListener("tick", handleTimelineTick);
 			scrollDirection = "idle";
+			if (exportRoot) exportRoot.stop();
 		}
 
-		// 4. Fallback-Timeout der Agentur deaktiviert (kein automatischer Loop nach 30s)
-		// Die Animation darf rein über den Scroll-Trigger gesteuert werden!
+		// 4. MAGIC CLICKTAG (Löst das Pokale/Flaschen-Overlay aus)
+		function magicClicktag() {
+			console.log("Magic Clicktag ausgelöst!");
 
-		// 5. Clicktag-Handler (Standard)
+			window.top.postMessage({
+				name: 'mutForward',
+				origin: 'sitebar',
+				payload: {
+					target: 'game',       // Sendet an das Vollbild-Overlay (#mutation-game)
+					action: 'ctaClick',   // Entspricht unserem Overlay-Listener
+					direction: 'ltr'
+				}
+			}, '*');
+		}
+
+		// Falls der Button direkt in Adobe Animate als MovieClip vorliegt:
+		window.addEventListener("load", function() {
+			setTimeout(function() {
+				if (typeof exportRoot !== "undefined") {
+					// Prüft gängige Instanznamen für den CTA-Button in Animate
+					var anBtn = exportRoot.cta || exportRoot.ctaBtn || exportRoot.magicClicktag;
+					if (anBtn) {
+						anBtn.cursor = "pointer";
+						anBtn.addEventListener("click", magicClicktag);
+					}
+				}
+			}, 500);
+		});
+
+		// 5. Clicktag-Parameter aus URL auslesen
 		var getUriParams = (function() {
 			var query_string = {};
 			var query = window.location.search.substring(1);
@@ -353,19 +383,6 @@
 			}
 			return query_string;
 		})();
-
-		// 6. Magic Clicktag (CTA an Overlay weiterleiten)
-		function magicClicktag() {
-			window.top.postMessage({
-				name: 'mutForward',
-				origin: 'sitebar',
-				payload: {
-					target: 'game',
-					action: 'fly',
-					direction: 'ltr'
-				}
-			}, '*');
-		}
 	</script>
 </body>
 </html>
