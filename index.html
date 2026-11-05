@@ -230,91 +230,12 @@
 		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
 		</div>
 	</div>
-		<script type="text/javascript">
-		var scrollY, windowHeight, maxY, totalFrames;
-var interactive_screen = false;
-var dummy = false;
-var scrolled = false;
-var animated = false;
-var interacted = false;
-var magic = false;
-
-if (dummy == true) {
-    console.log("Test Scrolling");
-
-    // Correctly access parent page scroll and height
-    maxY = window.parent.document.body.scrollHeight - window.parent.innerHeight;
-    scrollY = window.parent.scrollY || window.parent.pageYOffset;
-
-    scrolling();
-
-    // Attach the scroll event to the parent window
-    window.parent.addEventListener("scroll", function() {
-        scrollY = window.parent.scrollY || window.parent.pageYOffset;
-        scrolling();
-        scrolled = true;
-    });
-} else {
-    window.addEventListener(
-        "message",
-        function (msg) {
-            console.log("Real Scrolling");
-            console.log(msg);
-            console.log(msg.data);
-            console.log("Scrolly: " + msg.data.scrollY);
-            console.log("Doc Height: " + msg.data.docHeight);
-            console.log("Window Height: " + msg.data.windowHeight);
-            console.log("Scrolled V2");
-            maxY = msg.data.docHeight - msg.data.windowHeight;
-            scrollY = msg.data.scrollY;
-            windowHeight = msg.data.windowHeight;
-            scrolling();
-            scrolled = true;
-        },
-        false
-    );
-}
-
-function scrolling() {
-    // Limit scrollY to maxY to avoid going over
-    if (scrollY > maxY) { 
-        scrollY = maxY; 
-    }
-
-    
-    
-    // Normalize scrollY to a percentage (0-100)
-    scrollY = (scrollY / maxY) * 100;
-
-    if (typeof(exportRoot) != 'undefined') {
-        totalFrames = (exportRoot.timeline.duration - 1);
-
-        if (animated == false) {
-        	exportRoot.gotoAndStop(Math.round(totalFrames * (scrollY / 100)));
-        } else {
-        	console.log("Already animated.");
-        }
-        console.log("scrollY: " + scrollY);
-
-        // Check if scroll position is past 45% to trigger the interactive screen
-        /*if (scrollY >= 20) {
-            if (interactive_screen == false) {
-                exportRoot.interactive_screen.gotoAndPlay(0);
-                interactive_screen = true;
-            }
-        } else {
-            exportRoot.interactive_screen.gotoAndStop(0);
-            interactive_screen = false;
-        }*/
-    }
-
-    // Set the opacity of the adBody element to 1
-    document.getElementById("adBody").style.opacity = "1";
-}
-	</script>
-	<script>
+			<script type="text/javascript">
+		// ------------------------------------------------------
+		// 1. URI PARAMS (WICHTIG FÜR CLICKTAGS IM CREATIVE)
+		// ------------------------------------------------------
 		var getUriParams = function() {
-			var query_string = {}
+			var query_string = {};
 			var query = window.location.search.substring(1);
 			var parmsArray = query.split('&');
 			if(parmsArray.length <= 0) return query_string;
@@ -326,62 +247,211 @@ function scrolling() {
 			return query_string;
 		}();
 
+		// ------------------------------------------------------
+		// 2. SCROLL & ANIMATION LOGIK (PING-PONG)
+		// ------------------------------------------------------
+		var scrollY = 0, windowHeight = 0, maxY = 0;
+		var lastScrollY = 0;
+		var dummy = false; // Auf true setzen für lokales Testing ohne ADITION
+		
+		var animationState = {
+		    isPlaying: false,
+		    direction: 'forward', 
+		    currentFrame: 0,
+		    totalFrames: 0,
+		    hasStarted: false,
+		    scrollDirection: 'down',
+		    scrollThreshold: 2 // Verhindert Zittern bei minimalem Scroll
+		};
 
+		function startAnimation() {
+		    if (typeof(exportRoot) === 'undefined') {
+		        console.warn('[Animation] exportRoot not ready yet');
+		        return;
+		    }
+		    
+		    // Total Frames aus CreateJS Timeline lesen
+		    // CreateJS: timeline.duration gibt Ticks zurück, was bei 1:1 = Frames ist
+		    // Fallback: 447 Frames (bekannt aus index.js)
+		    var duration = exportRoot.timeline.duration;
+		    var totalFrames = exportRoot.totalFrames;
+		    
+		    console.log('[Animation] Timeline duration:', duration);
+		    console.log('[Animation] Total frames:', totalFrames);
+		    console.log('[Animation] Timeline object:', exportRoot.timeline);
+		    
+		    // Verschiedene Methoden um Frame-Anzahl zu bekommen
+		    if (totalFrames && totalFrames > 0) {
+		        animationState.totalFrames = totalFrames - 1;
+		    } else if (duration && duration > 0) {
+		        animationState.totalFrames = duration - 1;
+		    } else {
+		        // Fallback: Bekannte Frame-Anzahl aus index.js
+		        animationState.totalFrames = 446; // 447 Frames, 0-indexed
+		        console.log('[Animation] Using fallback: 447 frames');
+		    }
+		    
+		    console.log('[Animation] Total frames set to:', animationState.totalFrames);
+		    
+		    animationState.currentFrame = 0;
+		    animationState.isPlaying = true;
+		    animationState.hasStarted = true;
+		    animationState.direction = 'forward';
+		    
+		    console.log('[Animation] Starting animation loop');
+		    
+		    // Start Loop
+		    requestAnimationFrame(animationLoop);
+		}
+
+		function animationLoop() {
+		    if (!animationState.isPlaying || typeof(exportRoot) === 'undefined') {
+		        console.log('[Animation] Loop stopped - isPlaying:', animationState.isPlaying);
+		        return;
+		    }
+		    
+		    // Frame Update
+		    if (animationState.direction === 'forward') {
+		        animationState.currentFrame += 1;
+		        if (animationState.currentFrame >= animationState.totalFrames) {
+		            animationState.currentFrame = animationState.totalFrames;
+		            animationState.isPlaying = false; // Stop am Ende
+		            exportRoot.gotoAndStop(animationState.currentFrame);
+		            console.log('[Animation] Reached end frame:', animationState.currentFrame);
+		            return;
+		        }
+		    } else { 
+		        animationState.currentFrame -= 1;
+		        if (animationState.currentFrame <= 0) {
+		            animationState.currentFrame = 0;
+		            animationState.isPlaying = false; // Stop am Anfang
+		            exportRoot.gotoAndStop(animationState.currentFrame);
+		            console.log('[Animation] Reached start frame');
+		            return;
+		        }
+		    }
+		    
+		    exportRoot.gotoAndStop(Math.round(animationState.currentFrame));
+		    
+		    // Debug: Log every 50 frames
+		    if (animationState.currentFrame % 50 === 0) {
+		        console.log('[Animation] Current frame:', animationState.currentFrame);
+		    }
+		    
+		    requestAnimationFrame(animationLoop);
+		}
+
+		function handleScroll() {
+		    var scrollDelta = scrollY - lastScrollY;
+		    
+		    // Threshold gegen Zittern
+		    if (Math.abs(scrollDelta) < animationState.scrollThreshold) return;
+		    
+		    var newDirection = scrollDelta > 0 ? 'down' : 'up';
+		    
+		    console.log('[Scroll] Y:', scrollY, 'Delta:', scrollDelta, 'Direction:', newDirection);
+		    
+		    // ERSTER SCROLL -> START
+		    if (!animationState.hasStarted) {
+		        console.log('[Scroll] First scroll - starting animation');
+		        startAnimation();
+		        lastScrollY = scrollY;
+		        return;
+		    }
+		    
+		    // RICHTUNGSWECHSEL -> REVERSE
+		    if (newDirection !== animationState.scrollDirection) {
+		        console.log('[Scroll] Direction change:', animationState.scrollDirection, '->', newDirection);
+		        animationState.scrollDirection = newDirection;
+		        
+		        if (newDirection === 'down') {
+		            animationState.direction = 'forward';
+		        } else { 
+		            animationState.direction = 'backward';
+		        }
+		        
+		        // Re-Activate wenn gestoppt
+		        if (!animationState.isPlaying) {
+		             animationState.isPlaying = true;
+		             console.log('[Scroll] Reactivating animation loop');
+		             requestAnimationFrame(animationLoop);
+		        }
+		    }
+		    
+		    lastScrollY = scrollY;
+		}
+
+		// ------------------------------------------------------
+		// 3. EVENT LISTENER SETUP (DUMMY VS REAL)
+		// ------------------------------------------------------
+		if (dummy == true) {
+		    console.log("Test Scrolling (Dummy Mode)");
+		    maxY = window.parent.document.body.scrollHeight - window.parent.innerHeight;
+		    scrollY = window.parent.scrollY || window.parent.pageYOffset;
+		    lastScrollY = scrollY;
+		    
+		    window.parent.addEventListener("scroll", function() {
+		        scrollY = window.parent.scrollY || window.parent.pageYOffset;
+		        handleScroll();
+		    });
+		} else {
+		    // ADITION / MUTATION RELAY
+		    window.addEventListener("message", function (msg) {
+		        if (msg.data && msg.data.scrollY !== undefined) {
+		            maxY = msg.data.docHeight - msg.data.windowHeight;
+		            scrollY = msg.data.scrollY;
+		            windowHeight = msg.data.windowHeight;
+		            handleScroll();
+		        }
+		    }, false);
+		}
+
+		// ------------------------------------------------------
+		// 4. CTA & MAGIC CLICKTAG (BESTEHEND)
+		// ------------------------------------------------------
+		function magicClicktag() {
+		    console.log("Magic Clicktag!");
+		    window.top.postMessage({
+		        name: 'mutForward',
+		        origin: 'sitebar',
+		        payload: {
+		            target: 'game',
+		            action: 'fly',
+		            direction: 'ltr'
+		        }
+		    }, '*');
+		}
+
+		// ------------------------------------------------------
+		// 5. VISIBILITY & MUT INIT (BESTEHEND)
+		// ------------------------------------------------------
+		function sendPm() {
+		    window.top.postMessage({
+		        name: "mutInit",
+		        payload: { mutScrollPosition: true },
+		        origin: "sitebar"
+		    }, "*");
+		}
+
+		window.addEventListener("message", function(e) {
+		    if (e.data && e.data.name === "mutScrollPosition") {
+		        const sitebar = document.getElementById("animation_container");
+		        if (sitebar) {
+		            sitebar.style.opacity = (e.data.position >= 1) ? "1" : "0";
+		        }
+		    }
+		}, false);
+
+		// Init
+		sendPm();
+		
+		// Fallback: Start nach 30s falls User nie scrollt (Safety-Net)
 		setTimeout(function(){ 
-			console.log("Scrolling!");
-			if (scrolled == false) {
-		exportRoot.play();
-		scrolled = true;
-		animated = true;
-	}
+			if (!animationState.hasStarted && typeof(exportRoot) !== 'undefined') {
+				console.log("Fallback: Auto-start animation");
+				startAnimation();
+			}
 		}, 30000);
-
-	//CODE FÜR DIE LATERNEN INNERHALB DER UNTENSTEHENDEN FUNKTION "magicClicktag" EINFÜGEN
-	function magicClicktag() {
-    console.log("Magic Clicktag!");
-
-    window.top.postMessage({
-        name: 'mutForward',
-        origin: 'sitebar',
-        payload: {
-            target: 'game',
-            action: 'fly',
-            direction: 'ltr'
-        }
-    }, '*');
-}
-
-// ------------------------------------------------------
-// SITEBAR SICHTBAR AB 500px SCROLL
-// ------------------------------------------------------
-
-function sendPm() {
-    window.top.postMessage({
-        name: "mutInit",
-        payload: {
-            mutScrollPosition: true
-        },
-        origin: "sitebar"
-    }, "*");
-}
-
-window.addEventListener("message", function(e) {
-
-    if (e.data && e.data.name === "mutScrollPosition") {
-
-        const sitebar = document.getElementById("animation_container");
-
-        if (e.data.position >= 1) {
-            sitebar.style.opacity = "1";
-        } else {
-            sitebar.style.opacity = "0";
-        }
-    }
-
-}, false);
-
-sendPm();
-	
 	</script>
 </body>
 </html>
