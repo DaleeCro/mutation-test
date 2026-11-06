@@ -231,157 +231,152 @@
 		</div>
 	</div>
 	<script type="text/javascript">
-		var scrollY, windowHeight, maxY, totalFrames;
-var interactive_screen = false;
-var dummy = false;
-var scrolled = false;
-var animated = false;
-var interacted = false;
-var magic = false;
+	// ============================================================
+	// A) GLOBALS, die die index.js-Frame-Actions zwingend brauchen
+	//    (wurden beim ROVO-Umbau gelöscht → befeuern manageClicktags
+	//     + CTA-Wechsel frame_52…114 wieder)
+	// ============================================================
+	var scrollY = 0, windowHeight = 0, maxY = 0, totalFrames = 0;
+	var interactive_screen = false;
+	var dummy = false;            // true = lokales Testen OHNE initMessaging
+	var scrolled  = false;
+	var animated  = false;
+	var interacted = false;       // <-- Guard in frame_0/manageClicktags
+	var magic      = false;       // <-- Guard in frame_52…114 (CTA-Wechsel)
 
-if (dummy == true) {
-    console.log("Test Scrolling");
+	// scrolling() wird in handleComplete() referenziert (dummy-Branch).
+	// Im Prod-Pfad läuft die Scroll-Logik über mutScrollPosition, daher Noop:
+	function scrolling() { /* handled via initMessaging mutScrollPosition */ }
 
-    // Correctly access parent page scroll and height
-    maxY = window.parent.document.body.scrollHeight - window.parent.innerHeight;
-    scrollY = window.parent.scrollY || window.parent.pageYOffset;
+	// ============================================================
+	// B) CTA-KONFIG – HIER den Wert setzen, den dein Overlay erwartet
+	//    Original-Sitebar = 'fly'  |  Briefing-Dummy = 'ctaClick'
+	//    → im game-Overlay-Script nach `payload.action === '…'` schauen!
+	// ============================================================
+	var CTA_ACTION    = 'fly';
+	var CTA_DIRECTION = 'ltr';
 
-    scrolling();
+	// ============================================================
+	// C) SCROLL-PING-PONG (ROVO-Logik, unverändert)
+	// ============================================================
+	var lastScrollY = 0;
+	var scrollDirection = "idle";
+	var pingPongTickerActive = false;
+	var scrollStopTimeout = null;
 
-    // Attach the scroll event to the parent window
-    window.parent.addEventListener("scroll", function() {
-        scrollY = window.parent.scrollY || window.parent.pageYOffset;
-        scrolling();
-        scrolled = true;
-    });
-} else {
-    window.addEventListener(
-        "message",
-        function (msg) {
-            console.log("Real Scrolling");
-            console.log(msg);
-            console.log(msg.data);
-            console.log("Scrolly: " + msg.data.scrollY);
-            console.log("Doc Height: " + msg.data.docHeight);
-            console.log("Window Height: " + msg.data.windowHeight);
-            console.log("Scrolled V2");
-            maxY = msg.data.docHeight - msg.data.windowHeight;
-            scrollY = msg.data.scrollY;
-            windowHeight = msg.data.windowHeight;
-            scrolling();
-            scrolled = true;
-        },
-        false
-    );
-}
-
-function scrolling() {
-    // Limit scrollY to maxY to avoid going over
-    if (scrollY > maxY) { 
-        scrollY = maxY; 
-    }
-
-    
-    
-    // Normalize scrollY to a percentage (0-100)
-    scrollY = (scrollY / maxY) * 100;
-
-    if (typeof(exportRoot) != 'undefined') {
-        totalFrames = (exportRoot.timeline.duration - 1);
-
-        if (animated == false) {
-        	exportRoot.gotoAndStop(Math.round(totalFrames * (scrollY / 100)));
-        } else {
-        	console.log("Already animated.");
-        }
-        console.log("scrollY: " + scrollY);
-
-        // Check if scroll position is past 45% to trigger the interactive screen
-        /*if (scrollY >= 20) {
-            if (interactive_screen == false) {
-                exportRoot.interactive_screen.gotoAndPlay(0);
-                interactive_screen = true;
-            }
-        } else {
-            exportRoot.interactive_screen.gotoAndStop(0);
-            interactive_screen = false;
-        }*/
-    }
-
-    // Set the opacity of the adBody element to 1
-    document.getElementById("adBody").style.opacity = "1";
-}
-	</script>
-	<script>
-		var getUriParams = function() {
-			var query_string = {}
-			var query = window.location.search.substring(1);
-			var parmsArray = query.split('&');
-			if(parmsArray.length <= 0) return query_string;
-			for(var i = 0; i < parmsArray.length; i++) {
-				var pair = parmsArray[i].split('=');
-				var val = decodeURIComponent(pair[1]);
-				if (val != '' && pair[0] != '') query_string[pair[0]] = val;
-			}
-			return query_string;
-		}();
-
-
-		setTimeout(function(){ 
-			console.log("Scrolling!");
-			if (scrolled == false) {
-		exportRoot.play();
-		scrolled = true;
-		animated = true;
+	function sendPm() {
+		window.top.postMessage({
+			name: "mutInit",
+			origin: "sitebar",
+			payload: { mutScrollPosition: true, mutState: true }
+		}, "*");
 	}
-		}, 30000);
+	const fallbackTimer = setTimeout(sendPm, 1000);
 
-	//CODE FÜR DIE LATERNEN INNERHALB DER UNTENSTEHENDEN FUNKTION "magicClicktag" EINFÜGEN
+	window.addEventListener("message", function (e) {
+		const d = e.data;
+		if (!d || !d.name) return;
+
+		if (d.name === "mutInitReady") { clearTimeout(fallbackTimer); sendPm(); }
+
+		if (d.name === "mutScrollPosition") {
+			const currentY = d.position;
+			const animContainer = document.getElementById("animation_container");
+			if (animContainer) animContainer.style.opacity = currentY > 50 ? "1" : "0";
+
+			if (typeof exportRoot === "undefined" || !exportRoot.timeline) return;
+
+			if (currentY > lastScrollY + 1)      { scrollDirection = "down"; startTimelinePlayback(); }
+			else if (currentY < lastScrollY - 1) { scrollDirection = "up";   startTimelinePlayback(); }
+			lastScrollY = currentY;
+
+			clearTimeout(scrollStopTimeout);
+			scrollStopTimeout = setTimeout(stopPlayback, 100);
+		}
+	}, false);
+	sendPm();
+
+	function startTimelinePlayback() {
+		if (pingPongTickerActive) return;
+		pingPongTickerActive = true;
+		exportRoot.stop();
+		createjs.Ticker.addEventListener("tick", handleTimelineTick);
+	}
+	function handleTimelineTick() {
+		if (!exportRoot || !exportRoot.timeline) return;
+		var cur = exportRoot.currentFrame, total = exportRoot.timeline.duration - 1;
+		if (scrollDirection === "down") {
+			if (cur < total) exportRoot.gotoAndStop(cur + 1);
+			else { exportRoot.gotoAndStop(total); stopPlayback(); }
+		} else if (scrollDirection === "up") {
+			if (cur > 0) exportRoot.gotoAndStop(cur - 1);
+			else { exportRoot.gotoAndStop(0); stopPlayback(); }
+		} else { stopPlayback(); }
+		if (stage) stage.update();
+	}
+	function stopPlayback() {
+		pingPongTickerActive = false;
+		createjs.Ticker.removeEventListener("tick", handleTimelineTick);
+		scrollDirection = "idle";
+		if (exportRoot) exportRoot.stop();
+	}
+
+	// ============================================================
+	// D) MAGIC CLICKTAG – gebündelt wie Original-manageClicktags():
+	//    Button ausblenden + CTA tauschen (changeCTAS) + Overlay triggern.
+	//    Wird vom HTML-Button UND (Fallback) vom CreateJS-Button genutzt.
+	// ============================================================
 	function magicClicktag() {
-    console.log("Magic Clicktag!");
+		console.log("Magic Clicktag ausgelöst! action=" + CTA_ACTION);
+		window.top.postMessage({
+			name: 'mutForward',
+			origin: 'sitebar',
+			payload: { target: 'game', action: CTA_ACTION, direction: CTA_DIRECTION }
+		}, '*');
+	}
+	function changeCTAS() {
+		try { exportRoot.ctas.gotoAndPlay("changeCTA"); } catch (e) {}
+	}
+	// Einmalige Aktivierung (Guard wie Original), aber HTML-Button darf
+	// für Tests mehrfach feuern → Guard nur auf den CreateJS-Pfad legen:
+	function handleCtaActivation(fromCreateJs) {
+		if (fromCreateJs) {
+			if (interacted) return;          // CreateJS-Pfad: nur einmal
+			interacted = true;
+			exportRoot.magicClicktag.visible = false;
+		}
+		changeCTAS();                         // CTA-Grafik tauschen (Befund 3)
+		magicClicktag();                      // Overlay triggern (Befund 1)
+	}
 
-    window.top.postMessage({
-        name: 'mutForward',
-        origin: 'sitebar',
-        payload: {
-            target: 'game',
-            action: 'fly',
-            direction: 'ltr'
-        }
-    }, '*');
-}
+	// Fallback: falls der CreateJS-Button DOCH erreichbar ist (z. B. wenn
+	// der HTML-Button später entfernt wird), pressup an die Bündel-Logik hängen.
+	// frame_0 registriert bereits pressup→manageClicktags; wir überschreiben
+	// nicht, sondern ergänzen nur, falls noch kein Listener drauf war.
+	window.addEventListener("load", function () {
+		setTimeout(function () {
+			if (typeof exportRoot === "undefined") return;
+			var mc = exportRoot.magicClicktag;
+			if (mc && !mc.__ctaBound) {
+				mc.__ctaBound = true;
+				mc.cursor = "pointer";
+				// NICHT "click" (Double-Fire mit frame_0), sondern pressup spiegeln:
+				mc.addEventListener("pressup", function () { handleCtaActivation(true); });
+			}
+		}, 500);
+	});
 
-// ------------------------------------------------------
-// SITEBAR SICHTBAR AB 500px SCROLL
-// ------------------------------------------------------
-
-function sendPm() {
-    window.top.postMessage({
-        name: "mutInit",
-        payload: {
-            mutScrollPosition: true
-        },
-        origin: "sitebar"
-    }, "*");
-}
-
-window.addEventListener("message", function(e) {
-
-    if (e.data && e.data.name === "mutScrollPosition") {
-
-        const sitebar = document.getElementById("animation_container");
-
-        if (e.data.position >= 1) {
-            sitebar.style.opacity = "1";
-        } else {
-            sitebar.style.opacity = "0";
-        }
-    }
-
-}, false);
-
-sendPm();
-	
-	</script>
+	// ============================================================
+	// E) Clicktag-Parameter (unverändert)
+	// ============================================================
+	var getUriParams = (function () {
+		var qs = {}, q = window.location.search.substring(1), a = q.split('&');
+		for (var i = 0; i < a.length; i++) {
+			var p = a[i].split('=');
+			if (p[0]) qs[p[0]] = decodeURIComponent(p[1] || "");
+		}
+		return qs;
+	})();
+</script>
 </body>
 </html>
