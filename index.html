@@ -25,8 +25,6 @@
 			top:0px;
 			min-width: 600px !important;
 			min-height: 600px !important;
-			opacity: 0;
-			transition: opacity 0.6s ease-out, transform 0.6s ease-out;
 		}
 	</style>
 	<script src="createjs_2019.11.15_min.js"></script>
@@ -229,62 +227,73 @@
 		<canvas id="canvas" width="1000" height="1000" style="position: absolute; display: block; background-color:transparent;"></canvas>
 		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
 		</div>
+		<!-- HTML-FALLBACK-BTN: nur aktiv, falls die neue index.js KEINEN CreateJS-MovieClip
+		     für den Magic-BTN mitbringt (sonst wird dieser versteckt).
+		     Position/Größe an den visuellen CTA im Sujet anpassen. -->
+		<button id="htmlFallbackCta" type="button" onclick="handleCtaActivation('html')"
+		        style="display:none; position:absolute; z-index:1000; bottom:30px; left:50%; transform:translateX(-50%);
+		               width:60%; height:90px; padding:0; margin:0; border:none; background:transparent;
+		               cursor:pointer; font-size:0;">CTA</button>
 	</div>
+
 	<script type="text/javascript">
-	// ============================================================
-	// A) GLOBALS, die die index.js-Frame-Actions zwingend brauchen
-	//    (wurden beim ROVO-Umbau gelöscht → befeuern manageClicktags
-	//     + CTA-Wechsel frame_52…114 wieder)
-	// ============================================================
-	var scrollY = 0, windowHeight = 0, maxY = 0, totalFrames = 0;
-	var interactive_screen = false;
-	var dummy = false;            // true = lokales Testen OHNE initMessaging
-	var scrolled  = false;
-	var animated  = false;
-	var interacted = false;       // <-- Guard in frame_0/manageClicktags
-	var magic      = false;       // <-- Guard in frame_52…114 (CTA-Wechsel)
+		// ============================================================
+		// A) GLOBALS, die die index.js-Frame-Actions brauchen
+		// ============================================================
+		var scrollY = 0, windowHeight = 0, maxY = 0, totalFrames = 0;
+		var interactive_screen = false;
+		var dummy = true;           // true = lokales Testen ohne initMessaging
+		var scrolled  = false;
+		var animated  = false;
+		var interacted = false;
+		var magic      = false;
+		function scrolling() { /* Noop – Prod-Scroll läuft über mutScrollPosition */ }
 
-	// scrolling() wird in handleComplete() referenziert (dummy-Branch).
-	// Im Prod-Pfad läuft die Scroll-Logik über mutScrollPosition, daher Noop:
-	function scrolling() { /* handled via initMessaging mutScrollPosition */ }
+		// ============================================================
+		// B) CTA-CONTRACT ZUM OVERLAY
+		//    action MUSS dem String entsprechen, auf den das
+		//    game-Overlay-Script lauscht. 'fly' = Original-Pokale-Wert.
+		// ============================================================
+		var CTA_ACTION = 'fly';
+		var CTA_DIRECTION = 'ltr';
+		var CTA_SHOW_AFTER_PX = 500;   // <-- DEIN WUNSCH: Einblendung ab 500 px
 
-	// ============================================================
-	// B) CTA-KONFIG – HIER den Wert setzen, den dein Overlay erwartet
-	//    Original-Sitebar = 'fly'  |  Briefing-Dummy = 'ctaClick'
-	//    → im game-Overlay-Script nach `payload.action === '…'` schauen!
-	// ============================================================
-	var CTA_ACTION    = 'fly';
-	var CTA_DIRECTION = 'ltr';
+		// ============================================================
+		// C) PING-PONG-SCROLL (initMessaging-kompatibel)
+		// ============================================================
+		var lastScrollY = 0;
+		var scrollDirection = "idle";
+		var pingPongTickerActive = false;
+		var scrollStopTimeout = null;
+		var sitebarVisible = false;
 
-	// ============================================================
-	// C) SCROLL-PING-PONG (ROVO-Logik, unverändert)
-	// ============================================================
-	var lastScrollY = 0;
-	var scrollDirection = "idle";
-	var pingPongTickerActive = false;
-	var scrollStopTimeout = null;
+		function sendPm() {
+			window.top.postMessage({
+				name: "mutInit",
+				origin: "sitebar",
+				payload: { mutScrollPosition: true, mutState: true }
+			}, "*");
+		}
+		var fallbackTimer = setTimeout(sendPm, 1000);
 
-	function sendPm() {
-		window.top.postMessage({
-			name: "mutInit",
-			origin: "sitebar",
-			payload: { mutScrollPosition: true, mutState: true }
-		}, "*");
-	}
-	const fallbackTimer = setTimeout(sendPm, 1000);
+		window.addEventListener("message", function (e) {
+			var d = e.data;
+			if (!d || !d.name) return;
 
-	window.addEventListener("message", function (e) {
-		const d = e.data;
-		if (!d || !d.name) return;
+			if (d.name === "mutInitReady") { clearTimeout(fallbackTimer); sendPm(); return; }
 
-		if (d.name === "mutInitReady") { clearTimeout(fallbackTimer); sendPm(); }
+			if (d.name !== "mutScrollPosition") return;
+			var currentY = d.position;
+			if (currentY == null || isNaN(currentY)) return;
 
-		if (d.name === "mutScrollPosition") {
-			const currentY = d.position;
-			const animContainer = document.getElementById("animation_container");
-			if (animContainer) animContainer.style.opacity = currentY > 50 ? "1" : "0";
+			var animContainer = document.getElementById("animation_container");
+			if (animContainer) {
+				var shouldBeVisible = currentY >= CTA_SHOW_AFTER_PX;
+				animContainer.style.opacity = shouldBeVisible ? "1" : "0";
+				sitebarVisible = shouldBeVisible;
+			}
 
-			if (typeof exportRoot === "undefined" || !exportRoot.timeline) return;
+			if (typeof exportRoot === "undefined" || !exportRoot.timeline) { lastScrollY = currentY; return; }
 
 			if (currentY > lastScrollY + 1)      { scrollDirection = "down"; startTimelinePlayback(); }
 			else if (currentY < lastScrollY - 1) { scrollDirection = "up";   startTimelinePlayback(); }
@@ -292,91 +301,136 @@
 
 			clearTimeout(scrollStopTimeout);
 			scrollStopTimeout = setTimeout(stopPlayback, 100);
+		}, false);
+		sendPm();
+
+		function startTimelinePlayback() {
+			if (pingPongTickerActive) return;
+			pingPongTickerActive = true;
+			exportRoot.stop();
+			createjs.Ticker.addEventListener("tick", handleTimelineTick);
 		}
-	}, false);
-	sendPm();
+		function handleTimelineTick() {
+			if (!exportRoot || !exportRoot.timeline) return;
+			var cur = exportRoot.currentFrame;
+			var total = exportRoot.timeline.duration - 1;
+			if (scrollDirection === "down") {
+				if (cur < total) exportRoot.gotoAndStop(cur + 1);
+				else { exportRoot.gotoAndStop(total); stopPlayback(); }
+			} else if (scrollDirection === "up") {
+				if (cur > 0) exportRoot.gotoAndStop(cur - 1);
+				else { exportRoot.gotoAndStop(0); stopPlayback(); }
+			} else { stopPlayback(); }
+			if (stage) stage.update();
+		}
+		function stopPlayback() {
+			pingPongTickerActive = false;
+			createjs.Ticker.removeEventListener("tick", handleTimelineTick);
+			scrollDirection = "idle";
+			if (exportRoot) exportRoot.stop();
+		}
 
-	function startTimelinePlayback() {
-		if (pingPongTickerActive) return;
-		pingPongTickerActive = true;
-		exportRoot.stop();
-		createjs.Ticker.addEventListener("tick", handleTimelineTick);
-	}
-	function handleTimelineTick() {
-		if (!exportRoot || !exportRoot.timeline) return;
-		var cur = exportRoot.currentFrame, total = exportRoot.timeline.duration - 1;
-		if (scrollDirection === "down") {
-			if (cur < total) exportRoot.gotoAndStop(cur + 1);
-			else { exportRoot.gotoAndStop(total); stopPlayback(); }
-		} else if (scrollDirection === "up") {
-			if (cur > 0) exportRoot.gotoAndStop(cur - 1);
-			else { exportRoot.gotoAndStop(0); stopPlayback(); }
-		} else { stopPlayback(); }
-		if (stage) stage.update();
-	}
-	function stopPlayback() {
-		pingPongTickerActive = false;
-		createjs.Ticker.removeEventListener("tick", handleTimelineTick);
-		scrollDirection = "idle";
-		if (exportRoot) exportRoot.stop();
-	}
-
-	// ============================================================
-	// D) MAGIC CLICKTAG – gebündelt wie Original-manageClicktags():
-	//    Button ausblenden + CTA tauschen (changeCTAS) + Overlay triggern.
-	//    Wird vom HTML-Button UND (Fallback) vom CreateJS-Button genutzt.
-	// ============================================================
-	function magicClicktag() {
-		console.log("Magic Clicktag ausgelöst! action=" + CTA_ACTION);
-		window.top.postMessage({
-			name: 'mutForward',
-			origin: 'sitebar',
-			payload: { target: 'game', action: CTA_ACTION, direction: CTA_DIRECTION }
-		}, '*');
-	}
-	function changeCTAS() {
-		try { exportRoot.ctas.gotoAndPlay("changeCTA"); } catch (e) {}
-	}
-	// Einmalige Aktivierung (Guard wie Original), aber HTML-Button darf
-	// für Tests mehrfach feuern → Guard nur auf den CreateJS-Pfad legen:
-	function handleCtaActivation(fromCreateJs) {
-		if (fromCreateJs) {
-			if (interacted) return;          // CreateJS-Pfad: nur einmal
+		// ============================================================
+		// D) MAGIC CLICKTAG → mutForward an game-Overlay
+		//    sendet NUR die Message. Laternen-Logik liegt im Overlay.
+		//    Quelle: 'createjs' | 'html' (für Debugging)
+		// ============================================================
+		function magicClicktag(source) {
+			console.log("Magic Clicktag! action=" + CTA_ACTION + " source=" + source);
+			window.top.postMessage({
+				name: 'mutForward',
+				origin: 'sitebar',
+				payload: { target: 'game', action: CTA_ACTION, direction: CTA_DIRECTION }
+			}, '*');
+		}
+		function changeCTAS() {
+			try { if (exportRoot && exportRoot.ctas) exportRoot.ctas.gotoAndPlay("changeCTA"); } catch (e) {}
+		}
+		function handleCtaActivation(source) {
+			if (interacted) return;       // einmalig pro Pageview
 			interacted = true;
-			exportRoot.magicClicktag.visible = false;
+			try { if (exportRoot && exportRoot.magicClicktag) exportRoot.magicClicktag.visible = false; } catch (e) {}
+			changeCTAS();
+			magicClicktag(source);
 		}
-		changeCTAS();                         // CTA-Grafik tauschen (Befund 3)
-		magicClicktag();                      // Overlay triggern (Befund 1)
-	}
 
-	// Fallback: falls der CreateJS-Button DOCH erreichbar ist (z. B. wenn
-	// der HTML-Button später entfernt wird), pressup an die Bündel-Logik hängen.
-	// frame_0 registriert bereits pressup→manageClicktags; wir überschreiben
-	// nicht, sondern ergänzen nur, falls noch kein Listener drauf war.
-	window.addEventListener("load", function () {
+		// ============================================================
+		// E) CreateJS-BTN anbinden, falls im neuen index.js vorhanden.
+		//    Fallback: HTML-Button einblenden, falls keine Instanz da ist.
+		// ============================================================
+		function bindCtaButton() {
+			if (typeof exportRoot === "undefined") return false;
+			var candidates = [
+				exportRoot.magicClicktag,
+				exportRoot.cta,
+				exportRoot.ctaBtn,
+				exportRoot.magicBtn
+			];
+			for (var i = 0; i < candidates.length; i++) {
+				var btn = candidates[i];
+				if (btn && !btn.__ctaBound) {
+					btn.__ctaBound = true;
+					btn.cursor = "pointer";
+					btn.addEventListener("click", function () { handleCtaActivation('createjs'); });
+					console.log("CTA-BTN gefunden und gebunden:", btn);
+					return true;
+				}
+			}
+			return false;
+		}
+
+		// Nach Init prüfen, ob CreateJS-BTN existiert – sonst HTML-Fallback zeigen
 		setTimeout(function () {
-			if (typeof exportRoot === "undefined") return;
-			var mc = exportRoot.magicClicktag;
-			if (mc && !mc.__ctaBound) {
-				mc.__ctaBound = true;
-				mc.cursor = "pointer";
-				// NICHT "click" (Double-Fire mit frame_0), sondern pressup spiegeln:
-				mc.addEventListener("pressup", function () { handleCtaActivation(true); });
+			if (!bindCtaButton()) {
+				console.log("Kein CreateJS-CTA gefunden → HTML-Fallback aktivieren");
+				var fb = document.getElementById("htmlFallbackCta");
+				if (fb) fb.style.display = "block";
 			}
 		}, 500);
-	});
 
-	// ============================================================
-	// E) Clicktag-Parameter (unverändert)
-	// ============================================================
-	var getUriParams = (function () {
-		var qs = {}, q = window.location.search.substring(1), a = q.split('&');
-		for (var i = 0; i < a.length; i++) {
-			var p = a[i].split('=');
-			if (p[0]) qs[p[0]] = decodeURIComponent(p[1] || "");
+		// ============================================================
+		// F) Clicktag-URL-Params
+		// ============================================================
+		var getUriParams = (function () {
+			var qs = {}, q = window.location.search.substring(1), a = q.split('&');
+			for (var i = 0; i < a.length; i++) {
+				var p = a[i].split('=');
+				if (p[0]) qs[p[0]] = decodeURIComponent(p[1] || "");
+			}
+			return qs;
+		})();
+
+		// ============================================================
+		// G) Safety-Net: 4s ohne Scroll → Auto-Play (aus inHouse-Version)
+		// ============================================================
+		setTimeout(function () {
+			if (!scrolled && typeof exportRoot !== "undefined") {
+				exportRoot.play();
+				scrolled = true;
+				animated = true;
+			}
+		}, 4000);
+
+		// ============================================================
+		// H) DUMMY-MODUS: Lokales Testing OHNE initMessaging
+		//    (produktiv wird dieser Block via dummy=false NICHT ausgeführt)
+		// ============================================================
+		if (dummy === true) {
+			console.log("Test Scrolling (Dummy Mode)");
+			window.parent.addEventListener("scroll", function () {
+				var pos = window.parent.scrollY || window.parent.pageYOffset;
+				var animContainer = document.getElementById("animation_container");
+				if (animContainer) {
+					animContainer.style.opacity = pos >= CTA_SHOW_AFTER_PX ? "1" : "0";
+				}
+				if (typeof exportRoot === "undefined" || !exportRoot.timeline) { lastScrollY = pos; return; }
+				if (pos > lastScrollY + 1)      { scrollDirection = "down"; startTimelinePlayback(); }
+				else if (pos < lastScrollY - 1) { scrollDirection = "up";   startTimelinePlayback(); }
+				lastScrollY = pos;
+				clearTimeout(scrollStopTimeout);
+				scrollStopTimeout = setTimeout(stopPlayback, 100);
+			});
 		}
-		return qs;
-	})();
-</script>
+	</script>
 </body>
 </html>
