@@ -20,7 +20,7 @@
 			transition: opacity 0.05s;
 		}
 		#animation_container {
-			cursor: pointer; /* GDN */
+			cursor: pointer;
 			position:absolute;
 			top:0px;
 			min-width: 600px !important;
@@ -88,28 +88,16 @@
 				resizeCanvas();		
 				function resizeCanvas() {
 					var iw = window.innerWidth;
-
-    // Add a condition to check if iw is less than 300px
-					if (iw < 300) {
-						iw = 300;
-        //return; // Exit the function and do nothing
-					}
-
+					if (iw < 300) { iw = 300; }
 					var w = lib.properties.width, h = lib.properties.height;
 					var ih = window.innerHeight;
 					var pRatio = window.devicePixelRatio || 1, xRatio = iw / w, yRatio = ih / h, sRatio = 1;
 
 					if (isResp) {
-						if ((respDim == 'width' && lastW == iw) || (respDim == 'height' && lastH == ih)) {
-							sRatio = lastS;
-						} else if (!isScale) {
-							if (iw < w || ih < h)
-								sRatio = Math.min(xRatio, yRatio);
-						} else if (scaleType == 1) {
-							sRatio = Math.min(xRatio, yRatio);
-						} else if (scaleType == 2) {
-							sRatio = Math.max(xRatio, yRatio);
-						}
+						if ((respDim == 'width' && lastW == iw) || (respDim == 'height' && lastH == ih)) { sRatio = lastS; }
+						else if (!isScale) { if (iw < w || ih < h) sRatio = Math.min(xRatio, yRatio); }
+						else if (scaleType == 1) { sRatio = Math.min(xRatio, yRatio); }
+						else if (scaleType == 2) { sRatio = Math.max(xRatio, yRatio); }
 					}
 
 					canvas.width = w * pRatio * sRatio;
@@ -118,9 +106,7 @@
 					canvas.style.height = anim_container.style.height = dom_overlay_container.style.height = h * sRatio + 'px';
 					stage.scaleX = pRatio * sRatio;
 					stage.scaleY = pRatio * sRatio;
-					lastW = iw;
-					lastH = ih;
-					lastS = sRatio;
+					lastW = iw; lastH = ih; lastS = sRatio;
 					canvas.style.width = dom_overlay_container.style.width = anim_container.style.width = (ih * (canvas.height / canvas.width)) + 'px';
 					canvas.style.height = anim_container.style.height = dom_overlay_container.style.height = ih + 'px';
 
@@ -142,78 +128,38 @@
 					stage.tickOnUpdate = true;
 					adjustElementPosition(null, null);
 				}
-
-				//CALL THE FUNCTION TO ADJUST THE ELEMENTS OUTSIDE OF THE SAFE AREA
 				adjustElementPosition(null, null);
-				
 			}
 			makeResponsive(false,'both',false,1);	
 			AdobeAn.compositionLoaded(lib.properties.id);
 			fnStartAnimation();
-			if (dummy == true) {
-				scrolling();
-			}
+			if (dummy == true) { scrolling(); }
 			document.getElementsByTagName('canvas')[0].addEventListener("mousedown", function(e) { if(e.button == 2) window.contextMenu = true; }, false);
 		}
 
-		//FUNCTION TO ADJUST THE ELEMENTS OUTSIDE OF THE SAFE AREA
 		function adjustElementPosition(targetElement, alignment) {
 			const referenceWidth = 1000;
 			const viewportRatio = window.innerWidth / window.innerHeight;
-
 			if (targetElement !== null) {
-				// Store element information
 				window.positionedElements = window.positionedElements || [];
-				const elementInfo = {
-					obj: targetElement,
-					x: targetElement.x,
-					y: targetElement.y,
-					align: alignment
-				};
-				window.positionedElements.push(elementInfo);
+				window.positionedElements.push({ obj: targetElement, x: targetElement.x, y: targetElement.y, align: alignment });
 			} else {
-				// Reposition the elements
 				const elements = window.positionedElements || [];
-
 				for (let i = 0; i < elements.length; i++) {
 					const element = elements[i];
 					const elementWidth = element.obj.offsetWidth;
-					const isHalfCanvasWidth = window.innerWidth <= (elementWidth / 2);
-					const isFullCanvasWidth = window.innerWidth >= elementWidth;
-
-					if (isFullCanvasWidth) {
-						element.obj.x = element.x;
-					} else if (isHalfCanvasWidth) {
+					if (window.innerWidth >= elementWidth) { element.obj.x = element.x; }
+					else if (window.innerWidth <= (elementWidth / 2)) {
 						const quarterWidth = referenceWidth / 4;
-						if (element.align === "right") {
-							element.obj.x = element.x - quarterWidth;
-						}
-						if (element.align === "left") {
-							element.obj.x = element.x + quarterWidth;
-						}
+						if (element.align === "right") element.obj.x = element.x - quarterWidth;
+						if (element.align === "left")  element.obj.x = element.x + quarterWidth;
 					} else {
 						const xOffset = (referenceWidth - referenceWidth * viewportRatio) / 2;
 						if (element.align === "right") {
-							console.log(element.x - xOffset);
-							if ( (element.x - xOffset) >= 732.65 ) {
-								element.obj.x = element.x - xOffset;
-							} else {
-								element.obj.x = 732.65;
-							}
-							if ((element.x - xOffset) > 982.65) {
-								element.obj.x = 982.65;
-							}
-							console.log(element.obj.x);
+							element.obj.x = Math.max(732.65, Math.min(982.65, element.x - xOffset));
 						}
 						if (element.align === "left") {
-							if ( (element.x + xOffset) <= 313 ) {
-								element.obj.x = element.x + xOffset;
-							} else {
-								element.obj.x = 313;
-							}
-							if ((element.x + xOffset) < 77.4) {
-								element.obj.x = 77.4;
-							}
+							element.obj.x = Math.max(77.4, Math.min(313, element.x + xOffset));
 						}
 					}
 				}
@@ -225,47 +171,46 @@
 <body id="adBody" onload="init();" style="margin:0px;opacity:1;">
 	<div id="animation_container" style="background-color:transparent; width:1000px; height:1000px; min-width: 600px !important; min-height: 600px !important;">
 		<canvas id="canvas" width="1000" height="1000" style="position: absolute; display: block; background-color:transparent;"></canvas>
-		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
-		</div>
-		<!-- HTML-FALLBACK-BTN: nur aktiv, falls die neue index.js KEINEN CreateJS-MovieClip
-		     für den Magic-BTN mitbringt (sonst wird dieser versteckt).
-		     Position/Größe an den visuellen CTA im Sujet anpassen. -->
-		<button id="htmlFallbackCta" type="button" onclick="handleCtaActivation('html')"
-		        style="display:none; position:absolute; z-index:1000; bottom:30px; left:50%; transform:translateX(-50%);
-		               width:60%; height:90px; padding:0; margin:0; border:none; background:transparent;
-		               cursor:pointer; font-size:0;">CTA</button>
+		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;"></div>
+		<!-- KEIN HTML-FALLBACK-BTN MEHR NÖTIG: Der Magic-BTN ist als CreateJS-MovieClip 
+		     (exportRoot.magicClicktag) in der index.js perfekt positioniert (x=618, y=903.5) 
+		     und feuert via pressup -> manageClicktags() -> magicClicktag() -->
 	</div>
 
 	<script type="text/javascript">
 		// ============================================================
-		// A) GLOBALS, die die index.js-Frame-Actions brauchen
+		// A) GLOBALS – zwingend für die index.js Frame-Actions
+		//    (frame_0 'interacted'-Guard, frame_52..114 'magic'-Guard,
+		//     handleComplete dummy-Branch 'scrolling')
 		// ============================================================
 		var scrollY = 0, windowHeight = 0, maxY = 0, totalFrames = 0;
 		var interactive_screen = false;
-		var dummy = true;           // true = lokales Testen ohne initMessaging
+		var dummy = false;            // true = lokales Testen OHNE initMessaging
 		var scrolled  = false;
 		var animated  = false;
 		var interacted = false;
 		var magic      = false;
-		function scrolling() { /* Noop – Prod-Scroll läuft über mutScrollPosition */ }
+		function scrolling() { /* Noop – Prod-Scroll läuft via mutScrollPosition unten */ }
 
 		// ============================================================
 		// B) CTA-CONTRACT ZUM OVERLAY
-		//    action MUSS dem String entsprechen, auf den das
-		//    game-Overlay-Script lauscht. 'fly' = Original-Pokale-Wert.
+		//    'fly' = Original-Pokale-Wert. MUSS dem String im Overlay-Script entsprechen.
 		// ============================================================
 		var CTA_ACTION = 'fly';
 		var CTA_DIRECTION = 'ltr';
-		var CTA_SHOW_AFTER_PX = 500;   // <-- DEIN WUNSCH: Einblendung ab 500 px
+		var CTA_SHOW_AFTER_PX = 500;   // Sitebar-Einblendung ab 500 px Scroll
 
 		// ============================================================
 		// C) PING-PONG-SCROLL (initMessaging-kompatibel)
+		//    - lauscht NUR auf mutScrollPosition (Filter gegen Müll)
+		//    - liest 'position' (NICHT 'scrollY')
+		//    - keine Prozent-Normalisierung, keine docHeight/windowHeight-Rechnung
+		//    - Richtung aus Delta ableitbar
 		// ============================================================
 		var lastScrollY = 0;
 		var scrollDirection = "idle";
 		var pingPongTickerActive = false;
 		var scrollStopTimeout = null;
-		var sitebarVisible = false;
 
 		function sendPm() {
 			window.top.postMessage({
@@ -286,19 +231,20 @@
 			var currentY = d.position;
 			if (currentY == null || isNaN(currentY)) return;
 
+			// Einblendung ab 500 px
 			var animContainer = document.getElementById("animation_container");
 			if (animContainer) {
-				var shouldBeVisible = currentY >= CTA_SHOW_AFTER_PX;
-				animContainer.style.opacity = shouldBeVisible ? "1" : "0";
-				sitebarVisible = shouldBeVisible;
+				animContainer.style.opacity = currentY >= CTA_SHOW_AFTER_PX ? "1" : "0";
 			}
 
 			if (typeof exportRoot === "undefined" || !exportRoot.timeline) { lastScrollY = currentY; return; }
 
+			// Richtung
 			if (currentY > lastScrollY + 1)      { scrollDirection = "down"; startTimelinePlayback(); }
 			else if (currentY < lastScrollY - 1) { scrollDirection = "up";   startTimelinePlayback(); }
 			lastScrollY = currentY;
 
+			// Pause bei Scroll-Stopp (100 ms)
 			clearTimeout(scrollStopTimeout);
 			scrollStopTimeout = setTimeout(stopPlayback, 100);
 		}, false);
@@ -331,65 +277,22 @@
 		}
 
 		// ============================================================
-		// D) MAGIC CLICKTAG → mutForward an game-Overlay
-		//    sendet NUR die Message. Laternen-Logik liegt im Overlay.
-		//    Quelle: 'createjs' | 'html' (für Debugging)
+		// D) MAGIC CLICKTAG – wird von der index.js (frame_0/manageClicktags)
+		//    aufgerufen, wenn der User auf den CreateJS-MovieClip klickt.
+		//    Sendet NUR die mutForward-Message ans Overlay – die Pokale-Logik
+		//    liegt dort, nicht hier.
 		// ============================================================
-		function magicClicktag(source) {
-			console.log("Magic Clicktag! action=" + CTA_ACTION + " source=" + source);
+		function magicClicktag() {
+			console.log("Magic Clicktag! action=" + CTA_ACTION);
 			window.top.postMessage({
 				name: 'mutForward',
 				origin: 'sitebar',
 				payload: { target: 'game', action: CTA_ACTION, direction: CTA_DIRECTION }
 			}, '*');
 		}
-		function changeCTAS() {
-			try { if (exportRoot && exportRoot.ctas) exportRoot.ctas.gotoAndPlay("changeCTA"); } catch (e) {}
-		}
-		function handleCtaActivation(source) {
-			if (interacted) return;       // einmalig pro Pageview
-			interacted = true;
-			try { if (exportRoot && exportRoot.magicClicktag) exportRoot.magicClicktag.visible = false; } catch (e) {}
-			changeCTAS();
-			magicClicktag(source);
-		}
 
 		// ============================================================
-		// E) CreateJS-BTN anbinden, falls im neuen index.js vorhanden.
-		//    Fallback: HTML-Button einblenden, falls keine Instanz da ist.
-		// ============================================================
-		function bindCtaButton() {
-			if (typeof exportRoot === "undefined") return false;
-			var candidates = [
-				exportRoot.magicClicktag,
-				exportRoot.cta,
-				exportRoot.ctaBtn,
-				exportRoot.magicBtn
-			];
-			for (var i = 0; i < candidates.length; i++) {
-				var btn = candidates[i];
-				if (btn && !btn.__ctaBound) {
-					btn.__ctaBound = true;
-					btn.cursor = "pointer";
-					btn.addEventListener("click", function () { handleCtaActivation('createjs'); });
-					console.log("CTA-BTN gefunden und gebunden:", btn);
-					return true;
-				}
-			}
-			return false;
-		}
-
-		// Nach Init prüfen, ob CreateJS-BTN existiert – sonst HTML-Fallback zeigen
-		setTimeout(function () {
-			if (!bindCtaButton()) {
-				console.log("Kein CreateJS-CTA gefunden → HTML-Fallback aktivieren");
-				var fb = document.getElementById("htmlFallbackCta");
-				if (fb) fb.style.display = "block";
-			}
-		}, 500);
-
-		// ============================================================
-		// F) Clicktag-URL-Params
+		// E) URI-PARAMS (für den vollflächigen clicktag-Click in index.js)
 		// ============================================================
 		var getUriParams = (function () {
 			var qs = {}, q = window.location.search.substring(1), a = q.split('&');
@@ -401,7 +304,7 @@
 		})();
 
 		// ============================================================
-		// G) Safety-Net: 4s ohne Scroll → Auto-Play (aus inHouse-Version)
+		// F) Safety-Net: 4 s ohne Scroll → Auto-Play
 		// ============================================================
 		setTimeout(function () {
 			if (!scrolled && typeof exportRoot !== "undefined") {
@@ -412,17 +315,14 @@
 		}, 4000);
 
 		// ============================================================
-		// H) DUMMY-MODUS: Lokales Testing OHNE initMessaging
-		//    (produktiv wird dieser Block via dummy=false NICHT ausgeführt)
+		// G) DUMMY-MODUS – lokales Testen OHNE initMessaging
 		// ============================================================
 		if (dummy === true) {
 			console.log("Test Scrolling (Dummy Mode)");
 			window.parent.addEventListener("scroll", function () {
 				var pos = window.parent.scrollY || window.parent.pageYOffset;
 				var animContainer = document.getElementById("animation_container");
-				if (animContainer) {
-					animContainer.style.opacity = pos >= CTA_SHOW_AFTER_PX ? "1" : "0";
-				}
+				if (animContainer) animContainer.style.opacity = pos >= CTA_SHOW_AFTER_PX ? "1" : "0";
 				if (typeof exportRoot === "undefined" || !exportRoot.timeline) { lastScrollY = pos; return; }
 				if (pos > lastScrollY + 1)      { scrollDirection = "down"; startTimelinePlayback(); }
 				else if (pos < lastScrollY - 1) { scrollDirection = "up";   startTimelinePlayback(); }
