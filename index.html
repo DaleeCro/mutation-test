@@ -5,14 +5,12 @@
 	<title>SitebarXL ScrollAd</title>
 	<meta name="ad.size" content="width=1000,height=1000">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
-	<script type="text/javascript">
-	</script>
 	<style>
 		html, body {
 			overflow: hidden;
 			background: transparent;
-			width:100%;
-			height:100%;
+			width: 100%;
+			height: 100%;
 			max-width: 1000px;
 			max-height: 1000px;
 		}
@@ -21,8 +19,8 @@
 		}
 		#animation_container {
 			cursor: pointer; /* GDN */
-			position:absolute;
-			top:0px;
+			position: absolute;
+			top: 0px;
 			min-width: 600px !important;
 			min-height: 600px !important;
 		}
@@ -32,47 +30,41 @@
 	<script>
 		var canvas, stage, exportRoot, anim_container, dom_overlay_container, fnStartAnimation;
 		var reverse = false;
+
 		function init() {
 			canvas = document.getElementById("canvas");
 			anim_container = document.getElementById("animation_container");
 			dom_overlay_container = document.getElementById("dom_overlay_container");
-			var comp=AdobeAn.getComposition(Object.keys(AdobeAn.compositions)[0]);
-			var lib=comp.getLibrary();
+			var comp = AdobeAn.getComposition(Object.keys(AdobeAn.compositions)[0]);
+			var lib = comp.getLibrary();
 			var loader = new createjs.LoadQueue(false);
-			loader.addEventListener("fileload", function(evt){handleFileLoad(evt,comp)});
-			loader.addEventListener("complete", function(evt){handleComplete(evt,comp)});
-			var lib=comp.getLibrary();
-			if (lib.properties.manifest.length < 1) { handleComplete({}, comp);
-		} else { 
-			var loader = new createjs.LoadQueue(false);
-			loader.addEventListener("fileload", function(evt) { handleFileLoad(evt, comp) });
-			loader.addEventListener("complete", function(evt) { handleComplete(evt, comp) });
-			var lib = comp.getLibrary(); loader.loadManifest(lib.properties.manifest); }
+			loader.addEventListener("fileload", function(evt) { handleFileLoad(evt, comp); });
+			loader.addEventListener("complete", function(evt) { handleComplete(evt, comp); });
+
+			if (lib.properties.manifest.length < 1) { 
+				handleComplete({}, comp);
+			} else { 
+				loader.loadManifest(lib.properties.manifest); 
+			}
 		}
+
 		function handleFileLoad(evt, comp) {
-			var images=comp.getImages();	
+			var images = comp.getImages();	
 			if (evt && (evt.item.type == "image")) { images[evt.item.id] = evt.result; }	
 		}
-		function handleComplete(evt,comp) {
-			var lib=comp.getLibrary();
-			var ss=comp.getSpriteSheet();
+
+		function handleComplete(evt, comp) {
+			var lib = comp.getLibrary();
+			var ss = comp.getSpriteSheet();
 			var queue = evt.target;
 			var ssMetadata = lib.ssMetadata;
-			for(i=0; i<ssMetadata.length; i++) {
-				ss[ssMetadata[i].name] = new createjs.SpriteSheet( {"images": [queue.getResult(ssMetadata[i].name)], "frames": ssMetadata[i].frames} )
+			for (var i = 0; i < ssMetadata.length; i++) {
+				ss[ssMetadata[i].name] = new createjs.SpriteSheet({ "images": [queue.getResult(ssMetadata[i].name)], "frames": ssMetadata[i].frames });
 			}
 			exportRoot = new lib.index();
 			
-
-// COMMENT
-// ELEMENT POSITIONING - Init
+			// ELEMENT POSITIONING - Init & Apply
 			window.positionedElements = [];
-
-// Add elements to queue here
-			//adjustElementPosition(exportRoot.close, "left");
-			//adjustElementPosition(exportRoot.close, "right");
-
-// ELEMENT POSITIONING - Apply
 			adjustElementPosition(null, null);
 
 			stage = new lib.Stage(canvas);
@@ -81,19 +73,16 @@
 				stage.addChild(exportRoot);
 				createjs.Ticker.setFPS(lib.properties.fps);
 				createjs.Ticker.addEventListener("tick", stage);
-			}	    
+			};	    
+
 			function makeResponsive(isResp, respDim, isScale, scaleType) {		
-				var lastW, lastH, lastS=1;		
+				var lastW, lastH, lastS = 1;		
 				window.addEventListener('resize', resizeCanvas);		
 				resizeCanvas();		
+
 				function resizeCanvas() {
 					var iw = window.innerWidth;
-
-    // Add a condition to check if iw is less than 300px
-					if (iw < 300) {
-						iw = 300;
-        //return; // Exit the function and do nothing
-					}
+					if (iw < 300) { iw = 300; }
 
 					var w = lib.properties.width, h = lib.properties.height;
 					var ih = window.innerHeight;
@@ -103,8 +92,7 @@
 						if ((respDim == 'width' && lastW == iw) || (respDim == 'height' && lastH == ih)) {
 							sRatio = lastS;
 						} else if (!isScale) {
-							if (iw < w || ih < h)
-								sRatio = Math.min(xRatio, yRatio);
+							if (iw < w || ih < h) sRatio = Math.min(xRatio, yRatio);
 						} else if (scaleType == 1) {
 							sRatio = Math.min(xRatio, yRatio);
 						} else if (scaleType == 2) {
@@ -143,26 +131,28 @@
 					adjustElementPosition(null, null);
 				}
 
-				//CALL THE FUNCTION TO ADJUST THE ELEMENTS OUTSIDE OF THE SAFE AREA
 				adjustElementPosition(null, null);
-				
 			}
-			makeResponsive(false,'both',false,1);	
+
+			makeResponsive(false, 'both', false, 1);	
 			AdobeAn.compositionLoaded(lib.properties.id);
 			fnStartAnimation();
-			if (dummy == true) {
-				scrolling();
+
+			// Sicherstellen, dass die Timeline auf Frame 0 pausiert steht
+			if (exportRoot) {
+				exportRoot.stop();
 			}
-			document.getElementsByTagName('canvas')[0].addEventListener("mousedown", function(e) { if(e.button == 2) window.contextMenu = true; }, false);
+
+			document.getElementsByTagName('canvas')[0].addEventListener("mousedown", function(e) { 
+				if (e.button == 2) window.contextMenu = true; 
+			}, false);
 		}
 
-		//FUNCTION TO ADJUST THE ELEMENTS OUTSIDE OF THE SAFE AREA
 		function adjustElementPosition(targetElement, alignment) {
 			const referenceWidth = 1000;
 			const viewportRatio = window.innerWidth / window.innerHeight;
 
 			if (targetElement !== null) {
-				// Store element information
 				window.positionedElements = window.positionedElements || [];
 				const elementInfo = {
 					obj: targetElement,
@@ -172,7 +162,6 @@
 				};
 				window.positionedElements.push(elementInfo);
 			} else {
-				// Reposition the elements
 				const elements = window.positionedElements || [];
 
 				for (let i = 0; i < elements.length; i++) {
@@ -194,8 +183,7 @@
 					} else {
 						const xOffset = (referenceWidth - referenceWidth * viewportRatio) / 2;
 						if (element.align === "right") {
-							console.log(element.x - xOffset);
-							if ( (element.x - xOffset) >= 732.65 ) {
+							if ((element.x - xOffset) >= 732.65) {
 								element.obj.x = element.x - xOffset;
 							} else {
 								element.obj.x = 732.65;
@@ -203,10 +191,9 @@
 							if ((element.x - xOffset) > 982.65) {
 								element.obj.x = 982.65;
 							}
-							console.log(element.obj.x);
 						}
 						if (element.align === "left") {
-							if ( (element.x + xOffset) <= 313 ) {
+							if ((element.x + xOffset) <= 313) {
 								element.obj.x = element.x + xOffset;
 							} else {
 								element.obj.x = 313;
@@ -219,7 +206,6 @@
 				}
 			}
 		}
-		var timeline;
 	</script>
 </head>
 <body id="adBody" onload="init();" style="margin:0px;opacity:1;">
@@ -229,52 +215,129 @@
 		</div>
 	</div>
 
-	<!-- ==================================================================
-         UNTERER TEIL: NUR HIER habe ich geändert.
-         Die zwei Original-Script-Blöcke der Designerin (400px-/Prozent-
-         Scrubbing + adBody-Opacity) werden durch UNSER Ping-Pong + den
-         initMessaging-kompatiblen Listener ersetzt.
-         Layout-Code oben (head/style/init/resizeCanvas/adjustElementPosition)
-         ist bit-identisch zur Designerin-Datei.
-         ================================================================== -->
+	<!-- ==========================================================================
+	     SCROLL-GESTEUERTE PING-PONG ANIMATION & MUTATION-KOMPATIBILITÄT
+	     ========================================================================== -->
 	<script type="text/javascript">
-		// ------------------------------------------------------------
-		// A) Globals, die index.js zwingend braucht
-		//    (frame_0 'interacted', frame_52..114 'magic',
-		//     handleComplete ruft scrolling() nur bei dummy=true)
-		// ------------------------------------------------------------
-		var scrollY, windowHeight, maxY, totalFrames;
-		var interactive_screen = false;
-		var dummy = false;            // true = lokal OHNE initMessaging testen
-		var scrolled = false;
-		var animated = false;
-		var interacted = false;
-		var magic = false;
-		function scrolling() { /* Noop – Ping-Pong übernimmt die Steuerung */ }
+		var lastScrollY = 0;
+		var scrollDirection = "idle"; // "down", "up", "idle"
+		var pingPongTickerActive = false;
+		var scrollStopTimeout = null;
 
-		// ------------------------------------------------------------
-		// B) getUriParams (BLEIBT – index.js frame_0 nutzt getUriParams.clicktag)
-		// ------------------------------------------------------------
-		var getUriParams = function() {
-			var query_string = {}
+		// 1. Initialer Handshake mit initMessaging.min.js
+		function sendPm() {
+			window.top.postMessage({
+				name: "mutInit",
+				origin: "sitebar",
+				payload: {
+					mutScrollPosition: true,
+					mutState: true
+				}
+			}, "*");
+		}
+
+		const fallbackTimer = setTimeout(sendPm, 1000);
+
+		// 2. Empfang von Scroll- und Init-Events von der Hauptseite
+		window.addEventListener("message", function(e) {
+			const d = e.data;
+			if (!d || !d.name) return;
+
+			if (d.name === "mutInitReady") {
+				clearTimeout(fallbackTimer);
+				sendPm();
+			}
+
+			// Scroll-Event von der Hauptseite (derStandard)
+			if (d.name === "mutScrollPosition") {
+				const currentY = d.position;
+
+				if (typeof exportRoot === "undefined" || !exportRoot.timeline) return;
+
+				// Scroll-Richtung ermitteln
+				if (currentY > lastScrollY + 1) {
+					scrollDirection = "down"; // Vorwärts
+					startTimelinePlayback();
+				} else if (currentY < lastScrollY - 1) {
+					scrollDirection = "up";   // Rückwärts
+					startTimelinePlayback();
+				}
+
+				lastScrollY = currentY;
+
+				// Scroll-Stop Erkennung: Pausiert exakt am aktuellen Frame, sobald der User aufhört zu scrollen
+				clearTimeout(scrollStopTimeout);
+				scrollStopTimeout = setTimeout(function() {
+					stopPlayback();
+				}, 100);
+			}
+		}, false);
+
+		sendPm();
+
+		// 3. CreateJS Frame-Steuerung (Schrittweise bei Scroll, Pause bei Stop)
+		function startTimelinePlayback() {
+			if (pingPongTickerActive) return;
+			pingPongTickerActive = true;
+
+			if (exportRoot) exportRoot.stop();
+			createjs.Ticker.addEventListener("tick", handleTimelineTick);
+		}
+
+		function handleTimelineTick(event) {
+			if (!exportRoot || !exportRoot.timeline) return;
+
+			var cur = exportRoot.currentFrame;
+			var total = exportRoot.timeline.duration - 1;
+
+			if (scrollDirection === "down") {
+				// Runterscrollen -> Vorwärts abspielen
+				if (cur < total) {
+					exportRoot.gotoAndStop(cur + 1);
+				} else {
+					// Letzter Frame erreicht: Stehenbleiben (kein Loop!)
+					exportRoot.gotoAndStop(total);
+					stopPlayback();
+				}
+			} else if (scrollDirection === "up") {
+				// Raufscrollen -> Rückwärts abspielen (Ping-Pong)
+				if (cur > 0) {
+					exportRoot.gotoAndStop(cur - 1);
+				} else {
+					// Frame 0 erreicht: Stehenbleiben
+					exportRoot.gotoAndStop(0);
+					stopPlayback();
+				}
+			} else {
+				stopPlayback();
+			}
+
+			if (stage) stage.update();
+		}
+
+		function stopPlayback() {
+			pingPongTickerActive = false;
+			createjs.Ticker.removeEventListener("tick", handleTimelineTick);
+			scrollDirection = "idle";
+			if (exportRoot) exportRoot.stop();
+		}
+
+		// 4. Clicktag-Parameter auslesen (für den Haupt-Clicktag in index.js)
+		var getUriParams = (function() {
+			var query_string = {};
 			var query = window.location.search.substring(1);
 			var parmsArray = query.split('&');
-			if(parmsArray.length <= 0) return query_string;
-			for(var i = 0; i < parmsArray.length; i++) {
+			for (var i = 0; i < parmsArray.length; i++) {
 				var pair = parmsArray[i].split('=');
-				var val = decodeURIComponent(pair[1]);
-				if (val != '' && pair[0] != '') query_string[pair[0]] = val;
+				if (pair[0]) query_string[pair[0]] = decodeURIComponent(pair[1] || "");
 			}
 			return query_string;
-		}();
+		})();
 
-		// ------------------------------------------------------------
-		// C) magicClicktag (BLEIBT – index.js frame_0 ruft magicClicktag())
-		//    Sendet NUR mutForward ans game-Overlay. Laternen-Logik liegt dort.
-		//    action:'fly' = Original-Wert der Designerin.
-		// ------------------------------------------------------------
+		// 5. Magic Clicktag Trigger (wird von exportRoot.magicClicktag in index.js aufgerufen)
 		function magicClicktag() {
-			console.log("Magic Clicktag!");
+			console.log("[Sitebar] Magic Clicktag ausgelöst -> Weiterleitung an Overlay!");
+
 			window.top.postMessage({
 				name: 'mutForward',
 				origin: 'sitebar',
@@ -284,98 +347,6 @@
 					direction: 'ltr'
 				}
 			}, '*');
-		}
-
-		// ------------------------------------------------------------
-		// D) PING-PONG-SCROLL (initMessaging-kompatibel)
-		//    - lauscht NUR auf mutScrollPosition, liest 'position' (nicht 'scrollY')
-		//    - keine Prozent-/docHeight-Rechnung → kein NaN, kein Stauchen
-		//    - Richtung aus Delta; Runter=vorwärts, Rauf=rückwärts
-		//    - End-Stops bei Frame 0 / letztem Frame (kein Loop)
-		//    - Pause 100ms nach Scroll-Stopp
-		// ------------------------------------------------------------
-		var FADE_IN_PX = 500;          // Einblendung ab 500px (wie Designerin); auf 400 ändern falls gewünscht
-		var lastPos = null;
-		var direction = 'idle';
-		var tickerActive = false;
-		var stopTimer = null;
-
-		function applyScroll(pos) {
-			if (pos == null || isNaN(pos)) return;
-
-			// Einblendung der Sitebar
-			var c = document.getElementById('animation_container');
-			if (c) c.style.opacity = (pos >= FADE_IN_PX) ? '1' : '0';
-
-			if (typeof exportRoot === 'undefined' || !exportRoot.timeline) { lastPos = pos; return; }
-			if (lastPos === null) { lastPos = pos; return; }   // erster Snapshot = Baseline, nicht starten
-
-			var d = pos - lastPos;
-			if (Math.abs(d) < 1) { lastPos = pos; return; }    // Jitter ignorieren
-			lastPos = pos;
-			direction = d > 0 ? 'down' : 'up';
-			startTick();
-
-			clearTimeout(stopTimer);
-			stopTimer = setTimeout(stopTick, 100);
-		}
-
-		function startTick() {
-			if (tickerActive) return;
-			tickerActive = true;
-			exportRoot.stop();
-			createjs.Ticker.addEventListener('tick', tick);
-		}
-		function tick() {
-			if (!exportRoot || !exportRoot.timeline) return;
-			var cur = exportRoot.currentFrame;
-			var total = exportRoot.timeline.duration - 1;
-			if (direction === 'down') {
-				if (cur < total) exportRoot.gotoAndStop(cur + 1);
-				else { exportRoot.gotoAndStop(total); stopTick(); }
-			} else if (direction === 'up') {
-				if (cur > 0) exportRoot.gotoAndStop(cur - 1);
-				else { exportRoot.gotoAndStop(0); stopTick(); }
-			} else { stopTick(); }
-			if (stage) stage.update();
-		}
-		function stopTick() {
-			tickerActive = false;
-			createjs.Ticker.removeEventListener('tick', tick);
-			direction = 'idle';
-			if (exportRoot) exportRoot.stop();
-		}
-
-		// ------------------------------------------------------------
-		// E) initMessaging-Handshake + Listener (Produktion)
-		//    OHNE mutInit mit mutScrollPosition:true sendet die Library
-		//    NIEMALS Scroll-Events an den Origin 'sitebar'.
-		// ------------------------------------------------------------
-		function sendPm() {
-			window.top.postMessage({
-				name: "mutInit",
-				origin: "sitebar",
-				payload: { mutScrollPosition: true, mutState: true }
-			}, "*");
-		}
-		var fallbackTimer = setTimeout(sendPm, 1000);
-		window.addEventListener("message", function(e) {
-			var d = e.data;
-			if (!d || !d.name) return;
-			if (d.name === "mutInitReady") { clearTimeout(fallbackTimer); sendPm(); return; }
-			if (d.name !== "mutScrollPosition") return;
-			applyScroll(d.position);            // initMessaging sendet 'position'
-		}, false);
-		sendPm();
-
-		// ------------------------------------------------------------
-		// F) dummy-Modus: lokal OHNE initMessaging (Parent-Scroll direkt)
-		//    Nutzt dieselbe applyScroll()-Logik → identisches Ping-Pong-Verhalten.
-		// ------------------------------------------------------------
-		if (dummy === true) {
-			window.parent.addEventListener("scroll", function() {
-				applyScroll(window.parent.scrollY || window.parent.pageYOffset);
-			}, { passive: true });
 		}
 	</script>
 </body>
