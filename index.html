@@ -229,160 +229,159 @@
 		<canvas id="canvas" width="1000" height="1000" style="position: absolute; display: block; background-color:transparent;"></canvas>
 		<div id="dom_overlay_container" style="pointer-events:none; overflow:hidden; width:1000px; height:1000px; position: absolute; left: 0px; top: 0px; display: block;">
 		</div>
-		<!-- MAGIC CLICKTAG CTA BUTTON (Löst die Pokale im Overlay aus) -->
-		<button id="cta" type="button" onclick="magicClicktag()" style="position: absolute; z-index: 1000; bottom: 40px; left: 50%; transform: translateX(-50%); padding: 12px 24px; cursor: pointer; background: transparent; border: none; font-size: 0; width: 100%; height: 100px;">
-			Test-Animation starten
-		</button>
 	</div>
-	<!-- BEREINIGTE MUTATION, SCROLL-PAUSE & MAGIC-CLICKTAG LOGIK -->
 	<script type="text/javascript">
-		var lastScrollY = 0;
-		var scrollDirection = "idle"; // "down", "up", "idle"
-		var pingPongTickerActive = false;
-		var scrollStopTimeout = null;
+		var scrollY, windowHeight, maxY, totalFrames;
+var interactive_screen = false;
+var dummy = false;
+var scrolled = false;
+var animated = false;
+var interacted = false;
+var magic = false;
 
-		// 1. Initialer Handshake mit initMessaging.min.js
-		function sendPm() {
-			window.top.postMessage({
-				name: "mutInit",
-				origin: "sitebar",
-				payload: {
-					mutScrollPosition: true,
-					mutState: true
-				}
-			}, "*");
-		}
+if (dummy == true) {
+    console.log("Test Scrolling");
 
-		const fallbackTimer = setTimeout(sendPm, 1000);
+    // Correctly access parent page scroll and height
+    maxY = window.parent.document.body.scrollHeight - window.parent.innerHeight;
+    scrollY = window.parent.scrollY || window.parent.pageYOffset;
 
-		// 2. Empfang von Scroll- und Init-Events von der Hauptseite
-		window.addEventListener("message", function(e) {
-			const d = e.data;
-			if (!d || !d.name) return;
+    scrolling();
 
-			if (d.name === "mutInitReady") {
-				clearTimeout(fallbackTimer);
-				sendPm();
-			}
+    // Attach the scroll event to the parent window
+    window.parent.addEventListener("scroll", function() {
+        scrollY = window.parent.scrollY || window.parent.pageYOffset;
+        scrolling();
+        scrolled = true;
+    });
+} else {
+    window.addEventListener(
+        "message",
+        function (msg) {
+            console.log("Real Scrolling");
+            console.log(msg);
+            console.log(msg.data);
+            console.log("Scrolly: " + msg.data.scrollY);
+            console.log("Doc Height: " + msg.data.docHeight);
+            console.log("Window Height: " + msg.data.windowHeight);
+            console.log("Scrolled V2");
+            maxY = msg.data.docHeight - msg.data.windowHeight;
+            scrollY = msg.data.scrollY;
+            windowHeight = msg.data.windowHeight;
+            scrolling();
+            scrolled = true;
+        },
+        false
+    );
+}
 
-			if (d.name === "mutScrollPosition") {
-				const currentY = d.position;
+function scrolling() {
+    // Limit scrollY to maxY to avoid going over
+    if (scrollY > maxY) { 
+        scrollY = maxY; 
+    }
 
-				// Sitebar einblenden ab Scroll > 50px
-				const animContainer = document.getElementById("animation_container");
-				if (animContainer) {
-					animContainer.style.opacity = currentY > 50 ? "1" : "0";
-				}
+    
+    
+    // Normalize scrollY to a percentage (0-100)
+    scrollY = (scrollY / maxY) * 100;
 
-				if (typeof exportRoot === "undefined" || !exportRoot.timeline) return;
+    if (typeof(exportRoot) != 'undefined') {
+        totalFrames = (exportRoot.timeline.duration - 1);
 
-				// Scroll-Richtung ermitteln
-				if (currentY > lastScrollY + 1) {
-					scrollDirection = "down"; // Vorwärts
-					startTimelinePlayback();
-				} else if (currentY < lastScrollY - 1) {
-					scrollDirection = "up";   // Rückwärts
-					startTimelinePlayback();
-				}
+        if (animated == false) {
+        	exportRoot.gotoAndStop(Math.round(totalFrames * (scrollY / 100)));
+        } else {
+        	console.log("Already animated.");
+        }
+        console.log("scrollY: " + scrollY);
 
-				lastScrollY = currentY;
+        // Check if scroll position is past 45% to trigger the interactive screen
+        /*if (scrollY >= 20) {
+            if (interactive_screen == false) {
+                exportRoot.interactive_screen.gotoAndPlay(0);
+                interactive_screen = true;
+            }
+        } else {
+            exportRoot.interactive_screen.gotoAndStop(0);
+            interactive_screen = false;
+        }*/
+    }
 
-				// === SCROLL-STOP ERKENNUNG ===
-				// Sobald für 100ms kein Scroll-Event mehr kommt, pausiert die Animation sofort!
-				clearTimeout(scrollStopTimeout);
-				scrollStopTimeout = setTimeout(function() {
-					stopPlayback();
-				}, 100);
-			}
-		}, false);
-
-		sendPm();
-
-		// 3. CreateJS Frame-Steuerung (Schrittweise bei Scroll, Pause bei Stop)
-		function startTimelinePlayback() {
-			if (pingPongTickerActive) return;
-			pingPongTickerActive = true;
-
-			exportRoot.stop(); // Standardmäßiges Autoplay von CreateJS stoppen
-			createjs.Ticker.addEventListener("tick", handleTimelineTick);
-		}
-
-		function handleTimelineTick(event) {
-			if (!exportRoot || !exportRoot.timeline) return;
-
-			var cur = exportRoot.currentFrame;
-			var total = exportRoot.timeline.duration - 1;
-
-			if (scrollDirection === "down") {
-				// Runterscrollen -> Vorwärts animieren
-				if (cur < total) {
-					exportRoot.gotoAndStop(cur + 1);
-				} else {
-					exportRoot.gotoAndStop(total); // Am Ende stehenbleiben (kein Loop!)
-					stopPlayback();
-				}
-			} else if (scrollDirection === "up") {
-				// Raufscrollen -> Rückwärts animieren
-				if (cur > 0) {
-					exportRoot.gotoAndStop(cur - 1);
-				} else {
-					exportRoot.gotoAndStop(0); // Am Anfang stehenbleiben
-					stopPlayback();
-				}
-			} else {
-				stopPlayback();
-			}
-
-			if (stage) stage.update();
-		}
-
-		function stopPlayback() {
-			pingPongTickerActive = false;
-			createjs.Ticker.removeEventListener("tick", handleTimelineTick);
-			scrollDirection = "idle";
-			if (exportRoot) exportRoot.stop();
-		}
-
-		// 4. MAGIC CLICKTAG (Löst das Pokale/Flaschen-Overlay aus)
-		function magicClicktag() {
-			console.log("Magic Clicktag ausgelöst!");
-
-			window.top.postMessage({
-				name: 'mutForward',
-				origin: 'sitebar',
-				payload: {
-					target: 'game',       // Sendet an das Vollbild-Overlay (#mutation-game)
-					action: 'ctaClick',   // Entspricht unserem Overlay-Listener
-					direction: 'ltr'
-				}
-			}, '*');
-		}
-
-		// Falls der Button direkt in Adobe Animate als MovieClip vorliegt:
-		window.addEventListener("load", function() {
-			setTimeout(function() {
-				if (typeof exportRoot !== "undefined") {
-					// Prüft gängige Instanznamen für den CTA-Button in Animate
-					var anBtn = exportRoot.cta || exportRoot.ctaBtn || exportRoot.magicClicktag;
-					if (anBtn) {
-						anBtn.cursor = "pointer";
-						anBtn.addEventListener("click", magicClicktag);
-					}
-				}
-			}, 500);
-		});
-
-		// 5. Clicktag-Parameter aus URL auslesen
-		var getUriParams = (function() {
-			var query_string = {};
+    // Set the opacity of the adBody element to 1
+    document.getElementById("adBody").style.opacity = "1";
+}
+	</script>
+	<script>
+		var getUriParams = function() {
+			var query_string = {}
 			var query = window.location.search.substring(1);
 			var parmsArray = query.split('&');
-			for (var i = 0; i < parmsArray.length; i++) {
+			if(parmsArray.length <= 0) return query_string;
+			for(var i = 0; i < parmsArray.length; i++) {
 				var pair = parmsArray[i].split('=');
-				if (pair[0]) query_string[pair[0]] = decodeURIComponent(pair[1] || "");
+				var val = decodeURIComponent(pair[1]);
+				if (val != '' && pair[0] != '') query_string[pair[0]] = val;
 			}
 			return query_string;
-		})();
+		}();
+
+
+		setTimeout(function(){ 
+			console.log("Scrolling!");
+			if (scrolled == false) {
+		exportRoot.play();
+		scrolled = true;
+		animated = true;
+	}
+		}, 30000);
+
+	//CODE FÜR DIE LATERNEN INNERHALB DER UNTENSTEHENDEN FUNKTION "magicClicktag" EINFÜGEN
+	function magicClicktag() {
+    console.log("Magic Clicktag!");
+
+    window.top.postMessage({
+        name: 'mutForward',
+        origin: 'sitebar',
+        payload: {
+            target: 'game',
+            action: 'fly',
+            direction: 'ltr'
+        }
+    }, '*');
+}
+
+// ------------------------------------------------------
+// SITEBAR SICHTBAR AB 500px SCROLL
+// ------------------------------------------------------
+
+function sendPm() {
+    window.top.postMessage({
+        name: "mutInit",
+        payload: {
+            mutScrollPosition: true
+        },
+        origin: "sitebar"
+    }, "*");
+}
+
+window.addEventListener("message", function(e) {
+
+    if (e.data && e.data.name === "mutScrollPosition") {
+
+        const sitebar = document.getElementById("animation_container");
+
+        if (e.data.position >= 1) {
+            sitebar.style.opacity = "1";
+        } else {
+            sitebar.style.opacity = "0";
+        }
+    }
+
+}, false);
+
+sendPm();
+	
 	</script>
 </body>
 </html>
